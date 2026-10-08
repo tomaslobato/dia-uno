@@ -1,0 +1,8 @@
+[env]
+JAVA_HOME = "/home/lobato/Work/.expo-tools/mise/installs/java/temurin-17.0.20+101"
+ANDROID_HOME = "/home/lobato/Work/.expo-tools/android-sdk"
+ANDROID_USER_HOME = "/home/lobato/Work/.expo-tools/android-user"
+ANDROID_AVD_HOME = "/home/lobato/Work/.expo-tools/avd"
+GRADLE_USER_HOME = "/home/lobato/Work/.expo-tools/gradle"
+npm_config_cache = "/home/lobato/Work/.expo-tools/npm-cache"
+_.path = ["/home/lobato/Work/.expo-tools/mise/installs/node/24.21.0/bin", "/home/lobato/Work/.expo-tools/mise/installs/java/temurin-17.0.20+101/bin", "/home/lobato/Work/.expo-tools/android-sdk/platform-tools", "/home/lobato/Work/.expo-tools/android-sdk/emulator", "/home/lobato/Work/.expo-tools/android-sdk/cmdline-tools/19.0/bin", "/home/lobato/Work/.expo-tools/node_modules/.bin"]
