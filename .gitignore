@@ -41,3 +41,9 @@ example
 # generated native folders
 /ios
 /android
+
+# Machine-specific development tools
+.mise.toml
+
+# Local APK output
+/artifacts/
