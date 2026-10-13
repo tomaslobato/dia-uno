@@ -5,16 +5,19 @@ import { useCallback, useRef, useState } from 'react';
 import { Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { type TaskList } from '@/models/task-list';
 import DateField from '@/components/date-field';
 import { type Task, type TaskDraft } from '@/models/task';
 
-type Props = { task?: Task; onSave: (draft: TaskDraft, id?: string) => void; onDelete: (id: string) => void; onClose: () => void; onToggle: (id: string) => void; onStar: (id: string) => void };
+type Props = { task?: Task; lists: TaskList[]; initialListId: string | null; onSave: (draft: TaskDraft, id?: string) => void; onDelete: (id: string) => void; onClose: () => void; onToggle: (id: string) => void; onStar: (id: string) => void };
 
-export default function TaskEditor({ task, onSave, onDelete, onClose, onToggle, onStar }: Props) {
+export default function TaskEditor({ task, lists, initialListId, onSave, onDelete, onClose, onToggle, onStar }: Props) {
   const { styles, color } = useSectionStyles(makeStyles, 'tasks');
   const insets = useSafeAreaInsets();
+  const listScroll = useRef<ScrollView>(null);
   const titleInput = useRef<TextInput>(null);
   const closing = useRef(false);
+  const [listId, setListId] = useState<string | null>(task ? task.listId : initialListId);
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
   const [date, setDate] = useState(task?.dueAt ? new Date(task.dueAt) : null);
@@ -33,7 +36,7 @@ export default function TaskEditor({ task, onSave, onDelete, onClose, onToggle, 
         return;
       }
     } else {
-      onSave({ title, description, dueAt: date?.toISOString() ?? null, hasTime: Boolean(date && hasTime) }, task?.id);
+      onSave({ listId, title, description, dueAt: date?.toISOString() ?? null, hasTime: Boolean(date && hasTime) }, task?.id);
     }
     closing.current = true;
     Keyboard.dismiss();
@@ -89,6 +92,10 @@ export default function TaskEditor({ task, onSave, onDelete, onClose, onToggle, 
               <MaterialIcons name="notes" size={22} color={color('#80868b')} style={styles.descriptionIcon} />
               <TextInput value={description} onChangeText={setDescription} placeholder="Añadir una descripción" placeholderTextColor={color('#80868b')} style={styles.description} accessibilityLabel="Descripción de la tarea" multiline maxLength={4000} textAlignVertical="top" />
             </View>
+            {lists.length > 0 && <>
+            <Text style={styles.dateLabel}>LISTA</Text>
+            <ScrollView ref={listScroll} horizontal nestedScrollEnabled directionalLockEnabled showsHorizontalScrollIndicator keyboardShouldPersistTaps="handled" style={styles.listScroll} contentContainerStyle={styles.listOptions}>{[{ id: null, name: 'Todo' }, ...lists].map((list) => <Pressable key={list.id ?? 'no-list'} onLayout={(event) => { if (listId === list.id) listScroll.current?.scrollTo({ x: Math.max(0, event.nativeEvent.layout.x - 4), animated: false }); }} accessibilityRole="radio" accessibilityLabel={`Guardar en ${list.name}`} accessibilityState={{ checked: listId === list.id }} aria-checked={listId === list.id} onPress={() => setListId(list.id)} style={[styles.option, styles.listOption, listId === list.id && styles.optionSelected]}><MaterialIcons name="list" size={18} color={color(listId === list.id ? '#1a73e8' : '#5f6368')} /><Text numberOfLines={1} style={[styles.optionText, { flexShrink: 1 }, listId === list.id && styles.optionTextSelected]}>{list.name}</Text></Pressable>)}</ScrollView>
+            </>}
             <View style={styles.divider} />
             <View style={styles.dateHeader}>
               <Text style={styles.dateLabel}>CUÁNDO</Text>
@@ -116,32 +123,35 @@ export default function TaskEditor({ task, onSave, onDelete, onClose, onToggle, 
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   overlay: { flex: 1, backgroundColor: color('#20212466'), justifyContent: 'flex-end' },
   sheet: { width: '100%', maxWidth: 600, alignSelf: 'center', maxHeight: '92%', backgroundColor: color('#fff'), borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 24, paddingTop: 10, boxShadow: '0px -4px 30px rgba(32,33,36,0.08)' },
-  handle: { width: 34, height: 4, borderRadius: 2, backgroundColor: color('#dadce0'), alignSelf: 'center', marginBottom: 18 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
-  eyebrow: { fontSize: 11, letterSpacing: 1.5, color: color('#80868b'), fontWeight: '600' },
+  handle: { width: 34, height: 4, borderRadius: 2, backgroundColor: color('#dadce0'), alignSelf: 'center', marginBottom: 14 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  eyebrow: { fontFamily: 'Manrope-SemiBold', fontSize: 11, letterSpacing: 1.5, color: color('#80868b'), fontWeight: 'normal' },
   done: { flexDirection: 'row', gap: 5, alignItems: 'center', paddingVertical: 5 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  deleteLabel: { fontSize: 14, color: color('#b3261e'), fontWeight: '600' },
-  doneLabel: { fontSize: 14, color: color('#1a73e8'), fontWeight: '600' },
-  form: { gap: 18, paddingBottom: 4 },
+  deleteLabel: { fontFamily: 'Manrope-SemiBold', fontSize: 14, color: color('#b3261e'), fontWeight: 'normal' },
+  doneLabel: { fontFamily: 'Manrope-SemiBold', fontSize: 14, color: color('#1a73e8'), fontWeight: 'normal' },
+  form: { gap: 14, paddingBottom: 4 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   titleInput: { flex: 1, minWidth: 0 },
   completeTarget: { width: 42, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12 },
   starTarget: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12 },
-  title: { fontSize: 23, lineHeight: 30, color: color('#202124'), fontWeight: '500', padding: 0, minHeight: 38 },
-  validation: { fontSize: 13, color: color('#b3261e') },
+  title: { fontFamily: 'Manrope-Medium', fontSize: 23, lineHeight: 30, color: color('#202124'), fontWeight: 'normal', padding: 0, minHeight: 38 },
+  validation: { fontFamily: 'Manrope-Regular', fontSize: 13, color: color('#b3261e') },
   descriptionRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   descriptionIcon: { marginTop: 3 },
-  description: { flex: 1, fontSize: 15, lineHeight: 23, minHeight: 64, maxHeight: 150, color: color('#5f6368'), padding: 0 },
+  description: { flex: 1, fontFamily: 'Manrope-Regular', fontSize: 15, lineHeight: 23, minHeight: 52, maxHeight: 150, color: color('#5f6368'), padding: 0 },
   divider: { height: 1, backgroundColor: color('#edf0f3') },
   dateHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  dateLabel: { fontSize: 10, color: color('#80868b'), letterSpacing: 1.3, fontWeight: '600' },
-  removeDate: { fontSize: 12, color: color('#5f6368') },
+  dateLabel: { fontFamily: 'Manrope-SemiBold', fontSize: 10, color: color('#80868b'), letterSpacing: 1.3, fontWeight: 'normal' },
+  removeDate: { fontFamily: 'Manrope-Regular', fontSize: 12, color: color('#5f6368') },
+  listScroll: { width: '100%', flexGrow: 0 },
+  listOptions: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingBottom: 5 },
+  listOption: { flexShrink: 0, maxWidth: 240 },
   options: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  option: { flexDirection: 'row', gap: 8, alignItems: 'center', borderWidth: 1, borderColor: color('#e1e5ea'), borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10 },
+  option: { maxWidth: '100%', flexDirection: 'row', gap: 8, alignItems: 'center', borderWidth: 1, borderColor: color('#e1e5ea'), borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10 },
   optionSelected: { backgroundColor: color('#e8f0fe'), borderColor: color('#e8f0fe') },
-  optionText: { color: color('#5f6368'), fontSize: 13, fontWeight: '500' },
+  optionText: { color: color('#5f6368'), fontFamily: 'Manrope-Medium', fontSize: 13, fontWeight: 'normal' },
   optionTextSelected: { color: color('#185abc') },
   hint: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 2 },
-  hintText: { color: color('#80868b'), fontSize: 11, flexShrink: 1 },
+  hintText: { color: color('#80868b'), fontFamily: 'Manrope-Regular', fontSize: 11, flexShrink: 1 },
 });

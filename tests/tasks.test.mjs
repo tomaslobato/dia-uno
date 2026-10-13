@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { matchesTaskDate, compareTaskDueDate, createTask, isOverdue, parseTasks } from '../src/models/task.ts';
+import { staysInTaskSchedule, taskDateSection, formatDueDate, matchesTaskDate, compareTaskDueDate, createTask, isOverdue, parseTasks } from '../src/models/task.ts';
 
 const draft = { title: '  Comprar pan  ', description: ' Integral ', dueAt: null, hasTime: false };
 
@@ -75,4 +75,46 @@ test('stars persist and old tasks without stars load without losing their inform
   const { starred, ...legacy } = task;
   assert.deepEqual(parseTasks(JSON.stringify([legacy])), [task]);
   assert.throws(() => parseTasks(JSON.stringify([{ ...task, starred: 'yes' }])));
+});
+
+test('past due dates use calendar-day labels across hours and year boundaries', () => {
+  const today = new Date(2026, 0, 2, 0, 5);
+  assert.equal(formatDueDate(new Date(2026, 0, 1, 23, 59).toISOString(), false, today), 'Ayer');
+  assert.equal(formatDueDate(new Date(2025, 11, 31, 18, 30).toISOString(), false, today), 'Hace 2 días');
+  assert.equal(formatDueDate(new Date(2025, 11, 30).toISOString(), false, today), 'Hace 3 días');
+  assert.equal(formatDueDate(new Date(2026, 0, 2).toISOString(), false, today), 'Hoy');
+  assert.equal(formatDueDate(new Date(2026, 0, 3).toISOString(), false, today), 'Mañana');
+  assert.match(formatDueDate(new Date(2026, 0, 1, 18, 30).toISOString(), true, today), /^Ayer, 18:30$/);
+});
+
+test('tasks can be unassigned and legacy main-list assignments become unassigned', () => {
+  assert.equal(createTask(draft).listId, null);
+  assert.equal(createTask({ ...draft, listId: null }).listId, null);
+  assert.equal(createTask({ ...draft, listId: 'list-work' }).listId, 'list-work');
+  assert.equal(parseTasks(JSON.stringify([{ ...createTask(draft), listId: 'mis-tareas' }]))[0].listId, null);
+});
+
+test('date sections are exclusive and use calendar days and Monday week boundaries', () => {
+  const now = new Date(2026, 9, 9, 23, 30);
+  const section = (year, month, day) => taskDateSection({ ...createTask(draft), dueAt: new Date(year, month, day, 12).toISOString() }, now);
+  assert.equal(section(2026, 9, 8), 'Vencidas');
+  assert.equal(section(2026, 9, 9), 'Hoy');
+  assert.equal(section(2026, 9, 10), 'Mañana');
+  assert.equal(section(2026, 9, 11), 'Esta semana');
+  assert.equal(section(2026, 9, 12), 'Futuro');
+  assert.equal(taskDateSection(createTask(draft), now), 'Sin fecha');
+  assert.equal(taskDateSection({ ...createTask(draft), dueAt: new Date(2027, 0, 1).toISOString() }, new Date(2026, 11, 31)), 'Mañana');
+  assert.equal(taskDateSection({ ...createTask(draft), dueAt: new Date(2026, 9, 12).toISOString() }, new Date(2026, 9, 11)), 'Mañana');
+});
+
+test('completed tasks scheduled today stay above until the local day ends', () => {
+  const now = new Date(2026, 11, 31, 23, 59);
+  const completed = { ...createTask(draft), completed: true, dueAt: new Date(2026, 11, 31, 9).toISOString(), hasTime: true };
+  assert.equal(staysInTaskSchedule(completed, now), true);
+  assert.equal(staysInTaskSchedule(completed, new Date(2027, 0, 1)), false);
+  assert.equal(staysInTaskSchedule({ ...completed, completed: false }, new Date(2027, 0, 1)), true);
+  assert.equal(taskDateSection({ ...completed, completed: false }, new Date(2027, 0, 1)), 'Vencidas');
+  assert.equal(staysInTaskSchedule({ ...completed, hasTime: false }, now), true);
+  assert.equal(staysInTaskSchedule({ ...completed, dueAt: null }, now), false);
+  assert.equal(staysInTaskSchedule({ ...completed, dueAt: new Date(2027, 0, 1).toISOString() }, now), false);
 });

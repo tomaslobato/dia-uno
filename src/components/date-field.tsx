@@ -43,5 +43,5 @@ export default function DateField({ value, hasTime, onChange }: DateFieldProps) 
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   container: { gap: 8 }, row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   field: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: color('#f0f5ff'), paddingHorizontal: 14, paddingVertical: 13, borderRadius: 12 },
-  label: { color: color('#185abc'), fontSize: 14, fontWeight: '500' },
+  label: { color: color('#185abc'), fontFamily: 'Manrope-Medium', fontSize: 14, fontWeight: 'normal' },
 });

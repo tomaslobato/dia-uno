@@ -5,9 +5,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { formatDueDate, isOverdue, type Task } from '@/models/task';
 
-type Props = { task: Task; onToggle: () => void; onEdit: () => void; onStar: () => void; animateArrival?: boolean; last?: boolean };
+type Props = { task: Task; listName?: string; onToggle: () => void; onEdit: () => void; onStar: () => void; animateArrival?: boolean; keepInPlace?: boolean; last?: boolean };
 
-export default function TaskRow({ task, onToggle, onEdit, onStar, animateArrival = false, last }: Props) {
+export default function TaskRow({ task, listName, onToggle, onEdit, onStar, animateArrival = false, keepInPlace = false, last }: Props) {
   const { styles, color } = useSectionStyles(makeStyles, 'tasks');
   const [entering, setEntering] = useState(animateArrival);
   const [presence] = useState(() => new Animated.Value(animateArrival ? 0 : 1));
@@ -23,6 +23,7 @@ export default function TaskRow({ task, onToggle, onEdit, onStar, animateArrival
   const overdue = isOverdue(task);
   const [progress] = useState(() => new Animated.Value(task.completed ? 1 : 0));
   const [checkScale] = useState(() => new Animated.Value(1));
+  useEffect(() => { progress.setValue(task.completed ? 1 : 0); }, [task.completed, progress]);
   const [transitioning, setTransitioning] = useState(false);
   const [lines, setLines] = useState<{ x: number; y: number; width: number; height: number }[]>([]);
 
@@ -40,6 +41,7 @@ export default function TaskRow({ task, onToggle, onEdit, onStar, animateArrival
       ]),
     ]).start(({ finished }) => {
       if (!finished) { setTransitioning(false); return; }
+      if (keepInPlace) { onToggle(); setTransitioning(false); return; }
       Animated.timing(presence, { toValue: 0, duration: 160, easing: Easing.inOut(Easing.cubic), useNativeDriver: false }).start(({ finished: moved }) => {
         if (moved) onToggle();
         else { presence.setValue(1); setTransitioning(false); }
@@ -61,6 +63,7 @@ export default function TaskRow({ task, onToggle, onEdit, onStar, animateArrival
       <Pressable onPress={onEdit} accessibilityRole="button" accessibilityLabel={`Editar tarea: ${task.title}`} style={StyleSheet.absoluteFill} />
       <View style={styles.content} pointerEvents="box-none">
         <View style={styles.textContent} pointerEvents="none">
+        {listName && <Text accessibilityLabel={`Lista de ${task.title}: ${listName}`} numberOfLines={1} ellipsizeMode="tail" style={styles.listName}>{listName}</Text>}
         <View style={styles.titleWrap}>
           <Animated.Text numberOfLines={2} ellipsizeMode="tail"
             onTextLayout={(event) => {
@@ -98,23 +101,24 @@ export default function TaskRow({ task, onToggle, onEdit, onStar, animateArrival
 }
 
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'stretch', minHeight: 64, overflow: 'hidden' },
+  row: { flexDirection: 'row', alignItems: 'stretch', minHeight: 60, overflow: 'hidden' },
   border: { borderBottomWidth: 1, borderBottomColor: color('#f0f2f5') },
   checkTarget: { width: 48, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   editArea: { flex: 1, minWidth: 0 },
   metadata: { maxWidth: 58, flexShrink: 0, alignItems: 'center', gap: 2 },
   starTarget: { width: 36, height: 28, alignSelf: 'flex-end', borderRadius: 10, alignItems: 'flex-end', justifyContent: 'center' },
   checkbox: { width: 21, height: 21, borderWidth: 1.7, borderColor: color('#a8b1be'), borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  content: { flexGrow: 1, flexShrink: 0, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingRight: 12 },
+  content: { flexGrow: 1, flexShrink: 0, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingRight: 10 },
   textContent: { flex: 1, minWidth: 0, gap: 1 },
+  listName: { fontFamily: 'Manrope-Medium', fontSize: 17, lineHeight: 23, color: color('#1a73e8') },
   titleWrap: { alignSelf: 'flex-start', maxWidth: '100%' },
   strike: { position: 'absolute', height: 1.3, backgroundColor: color('#8b919b') },
-  title: { fontSize: 16, color: color('#202124'), lineHeight: 23, fontWeight: '500' },
-  description: { color: color('#727780'), fontSize: 13, lineHeight: 19 },
+  title: { fontFamily: 'Manrope-Medium', fontSize: 17, color: color('#202124'), lineHeight: 23, fontWeight: 'normal' },
+  description: { color: color('#727780'), fontFamily: 'Manrope-Regular', fontSize: 14, lineHeight: 19 },
   completedTitle: { textDecorationLine: 'line-through', color: color('#8b919b'), fontWeight: '400' },
   completedDescription: { color: color('#9aa0a6') },
   date: { maxWidth: 58, flexShrink: 0, alignSelf: 'stretch', alignItems: 'flex-end', justifyContent: 'center', gap: 3 },
-  dateText: { fontSize: 11, lineHeight: 15, textAlign: 'right', color: color('#80868b'), fontWeight: '500' },
-  timeText: { fontSize: 12, lineHeight: 16, textAlign: 'right', color: color('#80868b'), fontWeight: '600' },
+  dateText: { fontFamily: 'Manrope-Medium', fontSize: 11, lineHeight: 15, textAlign: 'right', color: color('#80868b'), fontWeight: 'normal' },
+  timeText: { fontFamily: 'Manrope-SemiBold', fontSize: 12, lineHeight: 16, textAlign: 'right', color: color('#80868b'), fontWeight: 'normal' },
   overdue: { color: color('#b3261e') },
 });

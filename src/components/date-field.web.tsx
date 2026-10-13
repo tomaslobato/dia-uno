@@ -4,7 +4,7 @@ import type { DateFieldProps } from './date-field';
 
 const inputStyle = {
   border: '1px solid #dce4ef', borderRadius: 12, padding: '12px 14px',
-  color: '#185abc', background: '#f0f5ff', fontFamily: 'inherit', fontSize: 14,
+  color: '#185abc', background: '#f0f5ff', fontFamily: 'Manrope-Medium', fontSize: 14,
   minWidth: 0, flex: 1, outlineColor: '#1a73e8', colorScheme: 'light',
 } as const;
 

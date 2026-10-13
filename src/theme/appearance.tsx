@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -14,6 +15,13 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const writes = useRef(Promise.resolve());
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const previous = root.style.colorScheme;
+    root.style.colorScheme = preferences.dark ? 'dark' : 'light';
+    return () => { root.style.colorScheme = previous; };
+  }, [preferences.dark]);
   useEffect(() => {
     let active = true;
     AsyncStorage.getItem('tareas.appearance.v1').then((raw) => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createHabit, dayKey, localDay, monthDays, yearWeeks, parseHabits, previousDay, isScheduledDay, toggleHabitDay, habitStreak } from '../src/models/habit.ts';
+import { habitProgressRange, habitAttentionKeys, lostHabitStreak, habitHistoryYears, createHabit, dayKey, localDay, monthDays, yearWeeks, parseHabits, previousDay, isScheduledDay, toggleHabitDay, habitStreak } from '../src/models/habit.ts';
 
 test('habit records preserve names, frequency and completed days', () => {
   const habit = createHabit('  Leer  ', 3, localDay('2026-10-08'));
@@ -61,4 +61,44 @@ test('daily streaks bridge year boundaries and react to yesterday edits', () => 
   assert.equal(habitStreak(toggleHabitDay(habit, '2025-12-31', '2026-01-01'), '2026-01-01'), 1);
   assert.equal(habitStreak({ ...habit, intervalDays: 2, completedDays: ['2024-02-28', '2024-03-01'] }, '2024-03-03'), 2);
   assert.equal(parseHabits(JSON.stringify([{ ...habit, intervalDays: 10 }]))[0].intervalDays, 10);
+});
+
+test('habit history includes its real years instead of three fixed years', () => {
+  const habit = createHabit('Leer', 1, localDay('2026-10-10'));
+  assert.deepEqual(habitHistoryYears(habit, '2026-10-10'), [2026]);
+  assert.deepEqual(habitHistoryYears({ ...habit, createdOn: '2022-11-01' }, '2026-10-10'), [2026, 2025, 2024, 2023, 2022]);
+  assert.deepEqual(habitHistoryYears({ ...habit, completedDays: ['2024-12-31'] }, '2026-10-10'), [2026, 2025, 2024]);
+  assert.deepEqual(habitHistoryYears({ ...habit, completedDays: ['2027-01-01'] }, '2026-10-10'), [2026]);
+});
+
+test('streak loss waits for the configured interval and identifies each expired streak', () => {
+  const habit = { ...createHabit('Leer', 2, localDay('2026-10-01')), completedDays: ['2026-10-01', '2026-10-03'] };
+  assert.equal(lostHabitStreak(habit, '2026-10-05'), null);
+  const loss = lostHabitStreak(habit, '2026-10-06');
+  assert.ok(loss);
+  assert.equal(lostHabitStreak(habit, '2026-10-10'), loss);
+  assert.equal(lostHabitStreak({ ...habit, completedDays: [] }, '2026-10-10'), null);
+  const restarted = { ...habit, completedDays: [...habit.completedDays, '2026-10-06'] };
+  assert.equal(lostHabitStreak(restarted, '2026-10-06'), null);
+  assert.notEqual(lostHabitStreak(restarted, '2026-10-09'), loss);
+});
+
+test('habit attention follows frequency, completed days and new daily reminders', () => {
+  const habit = { ...createHabit('Leer', 3, localDay('2026-10-01')), completedDays: ['2026-10-02'] };
+  assert.deepEqual(habitAttentionKeys([habit], '2026-10-04'), []);
+  const due = habitAttentionKeys([habit], '2026-10-05');
+  assert.equal(due.length, 1);
+  const overdue = habitAttentionKeys([habit], '2026-10-06');
+  assert.equal(overdue.length, 2);
+  assert.notEqual(due[0], overdue[0]);
+  assert.deepEqual(habitAttentionKeys([{ ...habit, completedDays: [...habit.completedDays, '2026-10-06'] }], '2026-10-06'), []);
+  assert.deepEqual(habitAttentionKeys([], '2026-10-06'), []);
+  assert.deepEqual(habitAttentionKeys([habit], '2026-09-30'), []);
+});
+
+test('progress range spans the first through last completed day, keeping gaps and excluding future dates', () => {
+  const habit = { ...createHabit('Leer', 1, localDay('2022-01-01')), completedDays: ['2026-01-03', '2024-12-30', '2024-12-30', '2027-01-01'] };
+  assert.deepEqual(habitProgressRange(habit, '2026-10-10'), { first: '2024-12-30', last: '2026-01-03' });
+  assert.equal(habitProgressRange({ ...habit, completedDays: [] }, '2026-10-10'), null);
+  assert.deepEqual(habitProgressRange({ ...habit, completedDays: ['2026-01-03'] }, '2026-10-10'), { first: '2026-01-03', last: '2026-01-03' });
 });

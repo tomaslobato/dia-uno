@@ -1,60 +1,38 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useRef, useState } from 'react';
-import { createTask, parseTasks, type Task, type TaskDraft } from '@/models/task';
-
-const STORAGE_KEY = 'tareas.tasks.v1';
+import { useData } from '@/data/data-provider';
+import { createTaskList, DEFAULT_LIST_ID } from '@/models/task-list';
+import { createTask, type TaskDraft } from '@/models/task';
 
 export function useTasks() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const writes = useRef(Promise.resolve());
-
-  useEffect(() => {
-    let active = true;
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((value) => {
-        if (!active) return;
-        setTasks(parseTasks(value));
-        setReady(true);
-      })
-      .catch(() => {
-        if (active) setError('No pudimos abrir tus tareas. Cerrá y volvé a abrir la app.');
-      });
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    if (!ready) return;
-    // Serialize writes so an earlier save cannot overwrite a newer change.
-    writes.current = writes.current
-      .then(() => AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)))
-      .then(() => setError(null))
-      .catch(() => setError('No pudimos guardar los cambios en este dispositivo.'));
-  }, [tasks, ready]);
-
+  const { tasks, lists: storedLists, ready, error, mutate } = useData();
+  const lists = (storedLists ?? []).filter((list) => list.id !== DEFAULT_LIST_ID);
+  function addList(name: string) {
+    if (!ready || !name.trim() || name.trim().length > 16) return null;
+    const item = createTaskList(name);
+    mutate({ entity: 'lists', id: item.id, action: 'create', item });
+    return item.id;
+  }
+  function renameList(id: string, name: string) {
+    if (ready && name.trim() && name.trim().length <= 16) mutate({ entity: 'lists', id, action: 'patch', patch: { name: name.trim() } });
+  }
+  function deleteList(id: string) {
+    if (ready) mutate({ entity: 'lists', id, action: 'delete' });
+  }
   function saveTask(draft: TaskDraft, id?: string) {
     if (!draft.title.trim() || !ready) return;
-    setTasks((current) => id
-      ? current.map((task) => task.id === id
-        ? { ...task, ...draft, title: draft.title.trim(), description: draft.description.trim() }
-        : task)
-      : [...current, createTask(draft)]);
+    const clean = { ...draft, title: draft.title.trim(), description: draft.description.trim() };
+    if (id) mutate({ entity: 'tasks', id, action: 'patch', patch: clean });
+    else { const item = createTask(clean); mutate({ entity: 'tasks', id: item.id, action: 'create', item }); }
   }
-
   function toggleTask(id: string) {
-    setTasks((current) => current.map((task) => task.id === id
-      ? { ...task, completed: !task.completed }
-      : task));
+    const task = tasks.find((item) => item.id === id);
+    if (ready && task) mutate({ entity: 'tasks', id, action: 'patch', patch: { completed: !task.completed } });
   }
-
   function toggleStar(id: string) {
-    setTasks((current) => current.map((task) => task.id === id ? { ...task, starred: !task.starred } : task));
+    const task = tasks.find((item) => item.id === id);
+    if (ready && task) mutate({ entity: 'tasks', id, action: 'patch', patch: { starred: !task.starred } });
   }
-
   function deleteTask(id: string) {
-    setTasks((current) => current.filter((task) => task.id !== id));
+    if (ready) mutate({ entity: 'tasks', id, action: 'delete' });
   }
-
-  return { tasks, ready, error, saveTask, toggleTask, toggleStar, deleteTask };
+  return { tasks, lists, addList, renameList, deleteList, ready, error, saveTask, toggleTask, toggleStar, deleteTask };
 }
