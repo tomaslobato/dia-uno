@@ -25,8 +25,8 @@ export default function TaskListCreate({ onCreate, onClose, initialName }: { ini
   </Modal>;
 }
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.35)' }, sheet: { width: '100%', maxWidth: 500, padding: 24, gap: 20, borderRadius: 24, backgroundColor: color('#fff') },
-  title: { fontFamily: 'Manrope-SemiBold', fontSize: 22, fontWeight: 'normal', color: color('#202124') }, input: { fontFamily: 'Manrope-Regular', fontSize: 18, padding: 12, borderRadius: 12, backgroundColor: color('#f3f6f4'), color: color('#202124') },
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.35)' }, sheet: { width: '100%', maxWidth: 500, padding: 18, gap: 12, borderRadius: 20, backgroundColor: color('#fff') },
+  title: { fontFamily: 'Manrope-SemiBold', fontSize: 22, fontWeight: 'normal', color: color('#202124') }, input: { fontFamily: 'Manrope-Regular', fontSize: 18, padding: 10, borderRadius: 12, backgroundColor: color('#f3f6f4'), color: color('#202124') },
   limit: { fontFamily: 'Manrope-Regular', fontSize: 12, color: color('#80868b'), textAlign: 'right' },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }, button: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14 }, cancel: { color: color('#5f6368'), fontFamily: 'Manrope-Regular', fontSize: 14 }, create: { backgroundColor: color('#1a73e8') }, createText: { color: '#fff', fontFamily: 'Manrope-SemiBold', fontSize: 14, fontWeight: 'normal' },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 4 }, button: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14 }, cancel: { color: color('#5f6368'), fontFamily: 'Manrope-Regular', fontSize: 14 }, create: { backgroundColor: color('#1a73e8') }, createText: { color: '#fff', fontFamily: 'Manrope-SemiBold', fontSize: 14, fontWeight: 'normal' },
 });

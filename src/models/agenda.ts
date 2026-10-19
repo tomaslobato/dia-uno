@@ -53,9 +53,13 @@ export function calendarWeekDays(anchor: Date): string[] {
   monday.setDate(monday.getDate() - (monday.getDay() + 6) % 7);
   return Array.from({ length: 7 }, (_, i) => dayKey(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i, 12)));
 }
-export function agendaWeekTitle(days: string[]): string {
+export function agendaWeekTitle(days: string[], includeYear = true): string {
   const start = localDay(days[0]);
   const end = localDay(days[days.length - 1]);
+  if (!includeYear) {
+    if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) return `${start.getDate()}-${end.toLocaleDateString('es', { day: 'numeric', month: 'long' })}`;
+    return `${start.toLocaleDateString('es', { day: 'numeric', month: 'long' })}-${end.toLocaleDateString('es', { day: 'numeric', month: 'long' })}`;
+  }
   if (start.getFullYear() !== end.getFullYear()) return `${start.toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })} – ${end.toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}`;
   if (start.getMonth() !== end.getMonth()) return `${start.toLocaleDateString('es', { day: 'numeric', month: 'short' })} – ${end.toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}`;
   return `${start.getDate()} – ${end.toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })}`;

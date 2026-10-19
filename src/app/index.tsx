@@ -1,7 +1,7 @@
 import Pressable from '@/components/feedback-pressable';
-import { useSectionStyles } from '@/theme/appearance';
+import { accentTextColor, useSectionStyles } from '@/theme/appearance';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,33 +16,36 @@ import { useTaskGreeting } from '@/hooks/use-task-greeting';
 import { useTaskDeletion } from '@/hooks/use-task-deletion';
 import { router, useLocalSearchParams } from 'expo-router';
 import { agendaDayLabel, shiftAgendaDay, agendaTasksForDay, validAgendaDay } from '@/models/agenda';
-import { dayKey, localDay } from '@/models/habit';
+import { localDay } from '@/models/habit';
 import { useTasks } from '@/hooks/use-tasks';
 import { compareTaskDueDate, matchesTaskDate, staysInTaskSchedule, taskDateSection, type Task } from '@/models/task';
 
 export default function TasksScreen() {
   const { day, agendaView, agendaDate } = useLocalSearchParams<{ day?: string; agendaView?: string; agendaDate?: string }>();
   const agendaDay = validAgendaDay(day) ? day : null;
+  const fixedMonthKey = agendaDay ? (validAgendaDay(agendaDate) ? agendaDate : agendaDay) : null;
+  const fixedMonth = fixedMonthKey ? localDay(fixedMonthKey).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }) : '';
   const { styles, color, preferences } = useSectionStyles(makeStyles, 'tasks');
   const { tasks, lists, addList, renameList, deleteList, ready, error, saveTask, toggleTask, toggleStar, deleteTask } = useTasks();
   const { removedId, removeTask, undoDelete } = useTaskDeletion(deleteTask);
-  const visibleTasks = tasks.filter((task) => task.id !== removedId);
+  const visibleTasks = useMemo(() => tasks.filter((task) => task.id !== removedId), [tasks, removedId]);
   const [listId, setListId] = useState('all');
   const [managingList, setManagingList] = useState<string | null>(null);
-  const managedList = lists.find((list) => list.id === managingList);
+  const managedList = useMemo(() => lists.find((list) => list.id === managingList), [lists, managingList]);
   const [creatingList, setCreatingList] = useState(false);
-  const selectedList = lists.find((list) => list.id === listId);
-  const listTasks = agendaDay ? agendaTasksForDay(visibleTasks, agendaDay, true) : !selectedList ? visibleTasks : visibleTasks.filter((task) => task.listId === selectedList.id);
+  const selectedList = useMemo(() => lists.find((list) => list.id === listId), [lists, listId]);
+  const listTasks = useMemo(() => agendaDay ? agendaTasksForDay(visibleTasks, agendaDay, true) : !selectedList ? visibleTasks : visibleTasks.filter((task) => task.listId === selectedList.id), [agendaDay, visibleTasks, selectedList]);
   const greeting = useTaskGreeting();
   const insets = useSafeAreaInsets();
   const [editor, setEditor] = useState<{ task?: Task } | null>(null);
   const [arrival, setArrival] = useState<{ id: string; completed: boolean } | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [selectedDayListHeight, setSelectedDayListHeight] = useState(500);
   const starredOnly = !agendaDay && listId === 'starred';
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const refresh = () => setNow(new Date());
-    const timer = setInterval(refresh, 30000);
+    const timer = setInterval(refresh, 60000);
     let dayTimer: ReturnType<typeof setTimeout>;
     const scheduleMidnight = () => {
       const midnight = new Date();
@@ -66,21 +69,25 @@ export default function TasksScreen() {
     if (!task.completed && !staysToday) setShowCompleted(true);
     toggleTask(id);
   }
-  const pending = listTasks.filter((task) => staysInTaskSchedule(task, now) && (!starredOnly || task.starred)).sort(compareTaskDueDate);
-  const completed = listTasks.filter((task) => !staysInTaskSchedule(task, now) && (!starredOnly || task.starred)).sort(compareTaskDueDate);
-  const sections: { title: string; tasks: Task[] }[] = [];
-  for (const task of pending) {
-    const title = taskDateSection(task, now);
-    const previous = sections[sections.length - 1];
-    if (previous?.title === title) previous.tasks.push(task);
-    else sections.push({ title, tasks: [task] });
-  }
+  const pending = useMemo(() => listTasks.filter((task) => staysInTaskSchedule(task, now) && (!starredOnly || task.starred)).sort(compareTaskDueDate), [listTasks, now, starredOnly]);
+  const completed = useMemo(() => listTasks.filter((task) => !staysInTaskSchedule(task, now) && (!starredOnly || task.starred)).sort(compareTaskDueDate), [listTasks, now, starredOnly]);
+  const sections = useMemo(() => {
+    const result: { title: string; tasks: Task[] }[] = [];
+    for (const task of pending) {
+      const title = taskDateSection(task, now);
+      const previous = result[result.length - 1];
+      if (previous?.title === title) previous.tasks.push(task);
+      else result.push({ title, tasks: [task] });
+    }
+    return result;
+  }, [pending, now]);
   const today = now.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const listContent = (
         <ScrollView key={agendaDay ?? 'tasks'} showsVerticalScrollIndicator={false} contentContainerStyle={[agendaDay ? styles.dayScroll : styles.scroll, { paddingBottom: 116 + insets.bottom }]}>
+          <View onLayout={agendaDay ? (event) => { const height = Math.round(event.nativeEvent.layout.height); setSelectedDayListHeight((current) => current === height ? current : height); } : undefined} style={agendaDay ? [styles.dayCard, { borderColor: accentTextColor(preferences.agenda, preferences.dark) }] : undefined}>
           {agendaDay ? <AgendaDayButton accessibilityRole="button" accessibilityLabel="Volver al calendario" accessibilityHint="Toca el título o la fecha para abrir Agenda" onPress={() => router.navigate({ pathname: '/agenda', params: { view: agendaView, date: agendaDate } })} style={styles.dayHeading}>
-            <View style={[styles.dayNumber, agendaDay === dayKey(now) && { backgroundColor: preferences.agenda }]}><Text style={[styles.dayNumberText, agendaDay === dayKey(now) && { color: '#fff' }]}>{localDay(agendaDay).getDate()}</Text></View>
+            <View style={[styles.dayNumber, agendaDay && { backgroundColor: preferences.agenda }]}><Text style={[styles.dayNumberText, agendaDay && { color: '#fff' }]}>{localDay(agendaDay).getDate()}</Text></View>
             <Text accessibilityRole="header" style={styles.dayTitle}>{agendaDayLabel(agendaDay, now)}</Text>
           </AgendaDayButton> : <View style={styles.heading}>
             <Text style={styles.date}>{today.charAt(0).toUpperCase() + today.slice(1)}</Text>
@@ -100,7 +107,7 @@ export default function TasksScreen() {
           {!ready && !error && <ActivityIndicator color={color('#1a73e8')} style={styles.loading} />}
           {ready && sections.map((section) => <View key={section.title} style={styles.dateSection}>
             {!agendaDay && <Text accessibilityRole="header" style={styles.sectionTitle}>{section.title}</Text>}
-            <View style={styles.card}>{section.tasks.map((task, index) => <TaskRow key={task.id} task={task} swipeDeleteEnabled={!agendaDay} keepInPlace={matchesTaskDate(task, 'today', now)} listName={agendaDay || !selectedList ? lists.find((list) => list.id === task.listId)?.name : undefined} animateArrival={arrival?.id === task.id && arrival.completed === task.completed} onToggle={() => moveTask(task.id)} onEdit={() => setEditor({ task })} onStar={() => toggleStar(task.id)} onDelete={removeTask} last={index === section.tasks.length - 1} />)}</View>
+            <View style={[styles.card, agendaDay && styles.dayInnerCard]}>{section.tasks.map((task, index) => <TaskRow key={task.id} task={task} clockKey={Math.floor(now.getTime() / 60000)} swipeDeleteEnabled={!agendaDay} keepInPlace={matchesTaskDate(task, 'today', now)} listName={agendaDay || !selectedList ? lists.find((list) => list.id === task.listId)?.name : undefined} animateArrival={arrival?.id === task.id && arrival.completed === task.completed} onToggle={() => moveTask(task.id)} onEdit={() => setEditor({ task })} onStar={() => toggleStar(task.id)} onDelete={removeTask} last={index === section.tasks.length - 1} />)}</View>
           </View>)}
           {ready && pending.length === 0 && <View style={styles.empty}>
             <View style={styles.emptyIllustration}>
@@ -119,26 +126,28 @@ export default function TasksScreen() {
               <MaterialIcons name={showCompleted ? 'keyboard-arrow-down' : 'keyboard-arrow-right'} size={21} color={color('#80868b')} />
               <Text style={styles.completedLabel}>Completadas</Text><Text style={styles.completedCount}>{completed.length}</Text>
             </Pressable>
-            {showCompleted && <View style={styles.card}>{completed.map((task, index) => <TaskRow key={task.id} task={task} swipeDeleteEnabled={!agendaDay} keepInPlace={matchesTaskDate(task, 'today', now)} listName={agendaDay || !selectedList ? lists.find((list) => list.id === task.listId)?.name : undefined} animateArrival={arrival?.id === task.id && arrival.completed === task.completed} onToggle={() => moveTask(task.id)} onEdit={() => setEditor({ task })} onStar={() => toggleStar(task.id)} onDelete={removeTask} last={index === completed.length - 1} />)}</View>}
+            {showCompleted && <View style={[styles.card, agendaDay && styles.dayInnerCard]}>{completed.map((task, index) => <TaskRow key={task.id} task={task} clockKey={Math.floor(now.getTime() / 60000)} swipeDeleteEnabled={!agendaDay} keepInPlace={matchesTaskDate(task, 'today', now)} listName={agendaDay || !selectedList ? lists.find((list) => list.id === task.listId)?.name : undefined} animateArrival={arrival?.id === task.id && arrival.completed === task.completed} onToggle={() => moveTask(task.id)} onEdit={() => setEditor({ task })} onStar={() => toggleStar(task.id)} onDelete={removeTask} last={index === completed.length - 1} />)}</View>}
           </View>}
+          </View>
         </ScrollView>
   );
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <View style={styles.page}>
-        <SectionTabs active={agendaDay ? "agenda" : "tasks"} />
-        {agendaDay ? <AgendaDayCarousel day={agendaDay} lists={lists} tasks={visibleTasks} now={now} onStep={(direction) => { setArrival(null); setShowCompleted(false); router.setParams({ day: shiftAgendaDay(agendaDay, direction) }); }}>{listContent}</AgendaDayCarousel> : listContent}
+        {agendaDay && <View pointerEvents="none" style={styles.fixedMonth}><Text style={styles.fixedMonthTitle}>{fixedMonth.charAt(0).toUpperCase() + fixedMonth.slice(1)}</Text></View>}
+        {agendaDay ? <AgendaDayCarousel day={agendaDay} lists={lists} tasks={visibleTasks} now={now} selectedListHeight={selectedDayListHeight} onStep={(direction) => { setArrival(null); setShowCompleted(false); router.setParams({ day: shiftAgendaDay(agendaDay, direction) }); }}>{listContent}</AgendaDayCarousel> : listContent}
 
         {removedId && <View accessibilityLiveRegion="polite" style={[styles.undoBar, { bottom: 94 + Math.max(insets.bottom, 20) }]}>
           <Text style={styles.undoMessage}>Tarea eliminada</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Deshacer eliminación" onPress={undoDelete} style={styles.undoButton}><Text style={styles.undoText}>Deshacer</Text></Pressable>
         </View>}
-        <View pointerEvents="box-none" style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-          <Pressable disabled={!ready} onPress={() => setEditor({})} accessibilityRole="button" accessibilityLabel="Nueva tarea" style={[styles.addButton, !ready && styles.disabled]}>
+        <View pointerEvents="box-none" style={[styles.bottom, { bottom: 70 + Math.max(insets.bottom, 8) }]}>
+          <Pressable disabled={!ready} onPress={() => setEditor({})} accessibilityRole="button" accessibilityLabel="Nueva tarea" style={[styles.addButton, agendaDay && { backgroundColor: preferences.agenda, boxShadow: `0px 5px 18px ${preferences.agenda}38` }, !ready && styles.disabled]}>
             <MaterialIcons name="add" size={24} color="#fff" /><Text style={styles.addText}>Nueva tarea</Text>
           </Pressable>
         </View>
+        <SectionTabs active={agendaDay ? "agenda" : "tasks"} />
       </View>
       {managedList && <TaskListOptions key={managedList.id} list={managedList} onClose={() => setManagingList(null)} onRename={(name) => { renameList(managedList.id, name); setManagingList(null); }} onDelete={() => { deleteList(managedList.id); if (listId === managedList.id) setListId('all'); setManagingList(null); }} />}
       {creatingList && <TaskListCreate onClose={() => setCreatingList(false)} onCreate={(name) => { const id = addList(name); if (id) { setListId(id); setCreatingList(false); } }} />}
@@ -150,9 +159,10 @@ export default function TasksScreen() {
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: color('#f8fafd') },
   page: { flex: 1, width: '100%', maxWidth: 660, alignSelf: 'center' },
-  scroll: { paddingHorizontal: 24 },
-  dayScroll: { paddingHorizontal: 0 }, dayNumber: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }, dayNumberText: { fontFamily: 'Manrope-SemiBold', fontSize: 19, lineHeight: 25, color: color('#202124') },
-  dayHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 4, paddingBottom: 22 }, dayTitle: { fontFamily: 'Manrope-SemiBold', fontSize: 26, lineHeight: 34, color: color('#202124') },
+  scroll: { paddingHorizontal: 24, paddingTop: 16 },
+  dayScroll: { paddingHorizontal: 0, paddingTop: 16 }, dayCard: { minHeight: 500, marginHorizontal: 8, borderWidth: 1.5, borderRadius: 18, overflow: 'hidden', backgroundColor: color('#fff') }, dayInnerCard: { borderWidth: 0, borderRadius: 0, backgroundColor: 'transparent' }, dayNumber: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }, dayNumberText: { fontFamily: 'Manrope-SemiBold', fontSize: 19, lineHeight: 25, color: color('#202124') },
+  dayHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14 }, dayTitle: { fontFamily: 'Manrope-SemiBold', fontSize: 26, lineHeight: 34, color: color('#202124') },
+  fixedMonth: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 6 }, fixedMonthTitle: { fontFamily: 'Manrope-SemiBold', fontSize: 30, lineHeight: 38, color: color('#202124'), letterSpacing: -1 },
   heading: { paddingTop: 16, paddingBottom: 22 },
   date: { color: color('#80868b'), fontFamily: 'Manrope-Regular', fontSize: 12, marginBottom: 8 },
   title: { fontFamily: 'Manrope-SemiBold', fontSize: 30, lineHeight: 38, color: color('#202124'), fontWeight: 'normal', letterSpacing: -1.2 },
@@ -163,7 +173,7 @@ const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   dateSection: { marginBottom: 12 },
   sectionTitle: { color: color('#80868b'), fontFamily: 'Manrope-Medium', fontSize: 12, fontWeight: 'normal', marginBottom: 6, marginLeft: 4 },
   filterSelected: { backgroundColor: color('#e8f0fe'), borderColor: color('#1a73e8') },
-  filterSelectedText: { color: color('#1a73e8') },
+  filterSelectedText: { color: color('#185abc') },
   listTitle: { color: color('#3c4043'), fontFamily: 'Manrope-SemiBold', fontSize: 15, fontWeight: 'normal' },
   card: { backgroundColor: color('#fff'), borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: color('#edf0f5') },
   loading: { padding: 48 },
@@ -186,7 +196,7 @@ const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   undoMessage: { fontFamily: 'Manrope-Regular', fontSize: 14, color: color('#202124') },
   undoButton: { paddingHorizontal: 14, paddingVertical: 16, borderRadius: 12 },
   undoText: { fontFamily: 'Manrope-SemiBold', fontSize: 14, color: color('#1a73e8') },
-  bottom: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 24, paddingTop: 18, alignItems: 'flex-end' },
+  bottom: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 12, paddingTop: 18, alignItems: 'flex-end' },
   addButton: { flexDirection: 'row', alignItems: 'center', gap: 9, borderRadius: 18, backgroundColor: color('#1a73e8'), paddingHorizontal: 21, paddingVertical: 17, boxShadow: '0px 5px 18px rgba(26,115,232,0.22)' },
   addText: { color: '#fff', fontFamily: 'Manrope-SemiBold', fontSize: 14, fontWeight: 'normal' },
   disabled: { opacity: 0.5 },

@@ -87,10 +87,6 @@ export default function TaskEditor({ task, initialDate, lists, initialListId, on
               <MaterialIcons name="close" size={19} color={color('#b3261e')} />
               <Text style={styles.deleteLabel}>Eliminar</Text>
             </Pressable>}
-            <Pressable onPress={cancel} accessibilityRole="button" accessibilityLabel="Cancelar tarea" hitSlop={8} style={styles.done}>
-              <MaterialIcons name="close" size={19} color={color('#5f6368')} />
-              <Text style={styles.cancelLabel}>Cancelar</Text>
-            </Pressable>
             <Pressable onPress={finish} accessibilityRole="button" accessibilityLabel="Listo, guardar tarea" hitSlop={8} style={styles.done}>
               <MaterialIcons name="check" size={20} color={color('#1a73e8')} />
               <Text style={styles.doneLabel}>Listo</Text>
@@ -169,7 +165,6 @@ const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   done: { flexDirection: 'row', gap: 5, alignItems: 'center', paddingVertical: 5 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
   deleteLabel: { fontFamily: 'Manrope-SemiBold', fontSize: 14, color: color('#b3261e'), fontWeight: 'normal' },
-  cancelLabel: { fontFamily: 'Manrope-SemiBold', fontSize: 14, color: color('#5f6368'), fontWeight: 'normal' },
   doneLabel: { fontFamily: 'Manrope-SemiBold', fontSize: 14, color: color('#1a73e8'), fontWeight: 'normal' },
   form: { gap: 14, paddingBottom: 4 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -195,7 +190,7 @@ const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   hint: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 2 },
   hintText: { color: color('#80868b'), fontFamily: 'Manrope-Regular', fontSize: 11, flexShrink: 1 },
   recurrenceHint: { color: color('#80868b'), fontFamily: 'Manrope-Regular', fontSize: 11, marginTop: -8 },
-  repeatToggle: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  repeatToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, minHeight: 38, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: color('#e8f0fe') },
   repeatControls: { flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap' },
   repeatLabel: { fontFamily: 'Manrope-Medium', fontSize: 13, color: color('#5f6368') },
   stepper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: color('#e1e5ea'), borderRadius: 12, height: 40 },

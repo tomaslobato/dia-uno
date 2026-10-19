@@ -2,13 +2,13 @@ import { useAgendaCanPress } from '@/components/agenda-pager';
 import Pressable from '@/components/feedback-pressable';
 import { useSectionStyles } from '@/theme/appearance';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, PanResponder, StyleSheet, Text, View } from 'react-native';
 import { formatDueDate, isOverdue, type Task } from '@/models/task';
 
-type Props = { task: Task; listName?: string; onToggle: () => void; onEdit: () => void; onStar: () => void; onDelete: (id: string) => void; animateArrival?: boolean; keepInPlace?: boolean; swipeDeleteEnabled?: boolean; last?: boolean };
+type Props = { task: Task; listName?: string; onToggle: () => void; onEdit: () => void; onStar: () => void; onDelete: (id: string) => void; animateArrival?: boolean; keepInPlace?: boolean; swipeDeleteEnabled?: boolean; last?: boolean; clockKey?: number };
 
-export default function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateArrival = false, keepInPlace = false, swipeDeleteEnabled = true, last }: Props) {
+function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateArrival = false, keepInPlace = false, swipeDeleteEnabled = true, last }: Props) {
   const canPress = useAgendaCanPress();
   const { styles, color } = useSectionStyles(makeStyles, 'tasks');
   const [entering, setEntering] = useState(animateArrival);
@@ -140,6 +140,15 @@ export default function TaskRow({ task, listName, onToggle, onEdit, onStar, onDe
   );
 }
 
+function sameTaskRow(previous: Props, next: Props) {
+  // The row data and current item identity determine its actions; unrelated screen updates do not need to rebuild this animated tree.
+  return previous.task === next.task && previous.listName === next.listName && previous.animateArrival === next.animateArrival &&
+    previous.keepInPlace === next.keepInPlace && previous.swipeDeleteEnabled === next.swipeDeleteEnabled &&
+    previous.last === next.last && previous.clockKey === next.clockKey;
+}
+
+export default memo(TaskRow, sameTaskRow);
+
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   deleteBackground: { backgroundColor: color('#b3261e'), alignItems: 'flex-end', justifyContent: 'center', paddingRight: 24 },
   row: { backgroundColor: color('#fff'), flexDirection: 'row', alignItems: 'stretch', minHeight: 60, overflow: 'hidden' },
@@ -151,7 +160,7 @@ const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   checkbox: { width: 21, height: 21, borderWidth: 1.7, borderColor: color('#a8b1be'), borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   content: { flexGrow: 1, flexShrink: 0, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingRight: 10 },
   textContent: { flex: 1, minWidth: 0, gap: 1 },
-  listName: { fontFamily: 'Manrope-Medium', fontSize: 17, lineHeight: 23, color: color('#1a73e8') },
+  listName: { fontFamily: 'Manrope-Medium', fontSize: 11, lineHeight: 15, color: color('#1a73e8') },
   titleWrap: { alignSelf: 'flex-start', maxWidth: '100%' },
   strike: { position: 'absolute', height: 1.3, backgroundColor: color('#8b919b') },
   title: { fontFamily: 'Manrope-Medium', fontSize: 17, color: color('#202124'), lineHeight: 23, fontWeight: 'normal' },

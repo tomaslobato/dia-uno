@@ -1,10 +1,11 @@
 import { useData } from '@/data/data-provider';
 import { createTaskList, DEFAULT_LIST_ID } from '@/models/task-list';
 import { createTask, nextRecurringDueAt, type TaskDraft } from '@/models/task';
+import { useMemo } from 'react';
 
 export function useTasks() {
   const { tasks, lists: storedLists, ready, error, mutate } = useData();
-  const lists = (storedLists ?? []).filter((list) => list.id !== DEFAULT_LIST_ID);
+  const lists = useMemo(() => (storedLists ?? []).filter((list) => list.id !== DEFAULT_LIST_ID), [storedLists]);
   function addList(name: string) {
     if (!ready || !name.trim() || name.trim().length > 16) return null;
     const item = createTaskList(name);

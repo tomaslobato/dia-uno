@@ -9,6 +9,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppearanceProvider, useAppearance } from '@/theme/appearance';
+import { SectionMotionProvider, SectionMotionSurface } from '@/components/section-motion';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -16,7 +17,7 @@ function Navigation() {
   const { preferences, background } = useAppearance();
   const { session } = useAuth();
   const owner = session?.user.id ?? 'guest';
-  return <HabitAttentionProvider key={owner} owner={owner}><StatusBar style={preferences.dark ? 'light' : 'dark'} /><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }} /><StreakLossNotice key={owner} owner={owner} /></HabitAttentionProvider>;
+  return <HabitAttentionProvider key={owner} owner={owner}><StatusBar style={preferences.dark ? 'light' : 'dark'} /><SectionMotionProvider><SectionMotionSurface background={background}><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}><Stack.Screen name="index" options={{ animation: 'none' }} /><Stack.Screen name="habitos" options={{ animation: 'none' }} /><Stack.Screen name="agenda" options={{ animation: 'none' }} /><Stack.Screen name="ajustes" options={{ animation: 'none' }} /></Stack></SectionMotionSurface><StreakLossNotice key={owner} owner={owner} /></SectionMotionProvider></HabitAttentionProvider>;
 }
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({

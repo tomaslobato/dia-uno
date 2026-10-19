@@ -14,8 +14,8 @@ export default function DateField({ value, hasTime, onChange }: DateFieldProps) 
     if (Platform.OS === 'android') {
       DateTimePickerAndroid.open({
         value, mode: nextMode, is24Hour: true,
-        onChange: (event, selected) => {
-          if (event.type !== 'set' || !selected) return;
+        onValueChange: (_, selected) => {
+          if (!selected) return;
           const next = new Date(value);
           if (nextMode === 'date') next.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
           else next.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
@@ -36,7 +36,7 @@ export default function DateField({ value, hasTime, onChange }: DateFieldProps) 
           <Text style={styles.label}>{value.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
         </Pressable>}
       </View>
-      {Platform.OS === 'ios' && mode && <DateTimePicker value={value} mode={mode} display="spinner" locale="es-AR" themeVariant={preferences.dark ? "dark" : "light"} is24Hour onChange={(_, selected) => { if (selected) onChange(selected); }} />}
+      {Platform.OS === 'ios' && mode && <DateTimePicker value={value} mode={mode} display="spinner" locale="es-AR" themeVariant={preferences.dark ? "dark" : "light"} is24Hour onValueChange={(_, selected) => onChange(selected)} />}
     </View>
   );
 }

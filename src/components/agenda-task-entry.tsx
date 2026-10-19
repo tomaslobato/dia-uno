@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { memo } from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
 import { AgendaDayButton } from '@/components/agenda-pager';
 import { useSectionStyles } from '@/theme/appearance';
@@ -6,7 +7,7 @@ import { isAgendaTaskOverdue } from '@/models/agenda';
 import type { Task } from '@/models/task';
 
 type Props = { task: Task; day: string; detailed: boolean; now: Date; onEdit: () => void };
-export default function AgendaTaskEntry({ task, day, detailed, now, onEdit }: Props) {
+function AgendaTaskEntry({ task, day, detailed, now, onEdit }: Props) {
   const { styles, color, accent, soft } = useSectionStyles(makeStyles, 'tasks');
   const textColor = task.completed ? color('#80868b') : accent;
   const entryStyle = [styles.entry, detailed && styles.detailedEntry, { backgroundColor: task.completed ? color('#f3f6f4') : soft }];
@@ -21,6 +22,7 @@ export default function AgendaTaskEntry({ task, day, detailed, now, onEdit }: Pr
   </View>;
   return detailed ? <AgendaDayButton testID={`agenda-entry-${task.id}`} accessibilityRole="button" accessibilityLabel={`Editar tarea: ${task.title}`} onPress={(event) => { event.stopPropagation(); onEdit(); }} style={entryStyle}>{content}</AgendaDayButton> : <View testID={`agenda-entry-${task.id}`} pointerEvents="none" style={entryStyle}>{content}</View>;
 }
+export default memo(AgendaTaskEntry, (previous, next) => previous.task === next.task && previous.day === next.day && previous.detailed === next.detailed && Math.floor(previous.now.getTime() / 60000) === Math.floor(next.now.getTime() / 60000));
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   entry: { borderRadius: 4, paddingHorizontal: 3, paddingVertical: 2 }, detailedEntry: { borderRadius: 8, padding: 12 },
   heading: { flexDirection: 'row', alignItems: 'flex-start', gap: 3 }, star: { flexShrink: 0 },

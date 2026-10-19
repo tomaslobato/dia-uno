@@ -32,12 +32,12 @@ export default function TaskListOptions({ list, onClose, onRename, onDelete }: P
 }
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.35)' },
-  sheet: { width: '100%', maxWidth: 420, padding: 24, gap: 12, borderRadius: 24, backgroundColor: color('#fff') },
-  title: { fontFamily: 'Manrope-SemiBold', fontSize: 20, color: color('#202124'), marginBottom: 4 },
+  sheet: { width: '100%', maxWidth: 420, padding: 18, gap: 8, borderRadius: 20, backgroundColor: color('#fff') },
+  title: { fontFamily: 'Manrope-SemiBold', fontSize: 20, color: color('#202124'), marginBottom: 0 },
   message: { fontFamily: 'Manrope-Regular', fontSize: 14, lineHeight: 21, color: color('#5f6368') },
-  option: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 12 },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
-  button: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12 },
+  option: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10, paddingVertical: 9, borderRadius: 12 },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 4 },
+  button: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 12 },
   label: { fontFamily: 'Manrope-Medium', fontSize: 15, color: color('#1a73e8') },
   danger: { fontFamily: 'Manrope-Medium', fontSize: 15, color: color('#b3261e') },
 });

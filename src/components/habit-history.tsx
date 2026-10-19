@@ -1,15 +1,13 @@
 import { useSectionStyles } from '@/theme/appearance';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { memo } from 'react';
 import { habitHistoryYears, habitProgressRange, localDay, monthDays, yearWeeks, type Habit } from '@/models/habit';
 
-function Dot({ day, completed, today, small = false }: { day: string | null; completed: Set<string>; today: string; small?: boolean }) {
-  const { styles } = useSectionStyles(makeStyles, 'habits');
-  return <View accessible={!!day} accessibilityLabel={day ? `${day}: ${completed.has(day) ? 'completado' : 'sin completar'}` : undefined} style={[styles.dot, small && styles.small, !day && styles.hidden, day && day > today ? styles.future : undefined, day && completed.has(day) ? styles.done : undefined]} />;
-}
-export default function HabitHistory({ habit, today, expanded = false, completedRange = false }: { habit: Habit; today: string; expanded?: boolean; completedRange?: boolean }) {
+function HabitHistory({ habit, today, expanded = false, completedRange = false }: { habit: Habit; today: string; expanded?: boolean; completedRange?: boolean }) {
   const { styles } = useSectionStyles(makeStyles, 'habits');
   const date = localDay(today);
   const completed = new Set(habit.completedDays);
+  const renderDot = (day: string | null, small = false, key?: string | number) => <View key={key} accessible={!!day} accessibilityLabel={day ? `${day}: ${completed.has(day) ? 'completado' : 'sin completar'}` : undefined} style={[styles.dot, small && styles.small, !day && styles.hidden, day && day > today ? styles.future : undefined, day && completed.has(day) ? styles.done : undefined]} />;
   const range = completedRange ? habitProgressRange(habit, today) : null;
   if (expanded && completedRange) {
     if (!range) return null;
@@ -30,7 +28,7 @@ export default function HabitHistory({ habit, today, expanded = false, completed
           <Text style={styles.month}>{month.toLocaleDateString('es', { month: 'long', year: 'numeric' })}</Text>
           <View style={styles.grid}>
             {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((label, i) => <View key={`label-${i}`} style={styles.cell}><Text style={styles.weekday}>{label}</Text></View>)}
-            {cells.map((day, i) => <View key={day ?? i} style={styles.cell}><Dot day={day} completed={completed} today={today} /></View>)}
+            {cells.map((day, i) => <View key={day ?? i} style={styles.cell}>{renderDot(day)}</View>)}
           </View>
         </View>;
       })}
@@ -48,13 +46,14 @@ export default function HabitHistory({ habit, today, expanded = false, completed
         <View style={styles.dayLabels}>{['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((label, i) => <Text key={i} style={styles.dayLabel}>{label}</Text>)}</View>
         <ScrollView horizontal showsHorizontalScrollIndicator style={styles.yearScroll}><View>
           <View style={[styles.monthLabels, { width }]}>{months.map(({ month, week }) => <Text key={month} style={[styles.monthLabel, { left: week * 16 }]}>{new Date(year, month, 1).toLocaleDateString('es', { month: 'short' }).replace('.', '')}</Text>)}</View>
-          <View style={styles.weeks}>{weeks.map((week, i) => <View key={i} style={styles.week}>{week.map((day, j) => <Dot key={day ?? j} day={day} completed={completed} today={today} small />)}</View>)}</View>
+          <View style={styles.weeks}>{weeks.map((week, i) => <View key={i} style={styles.week}>{week.map((day, j) => renderDot(day, true, day ?? j))}</View>)}</View>
         </View></ScrollView>
       </View>
     </View>;
   })}<Text style={styles.legend}>Color: completado · Vacío: sin completar</Text></View>;
-  return <View><Text style={styles.month}>{date.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}</Text><View style={styles.grid}>{['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((label, i) => <View key={i} style={styles.cell}><Text style={styles.weekday}>{label}</Text></View>)}{monthDays(date.getFullYear(), date.getMonth()).map((day, i) => <View key={day ?? i} style={styles.cell}><Dot day={day} completed={completed} today={today} /></View>)}</View></View>;
+  return <View><Text style={styles.month}>{date.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}</Text><View style={styles.grid}>{['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((label, i) => <View key={i} style={styles.cell}><Text style={styles.weekday}>{label}</Text></View>)}{monthDays(date.getFullYear(), date.getMonth()).map((day, i) => <View key={day ?? i} style={styles.cell}>{renderDot(day)}</View>)}</View></View>;
 }
+export default memo(HabitHistory);
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   dot: { width: 18, height: 18, borderRadius: 6, borderWidth: 1.5, borderColor: color('#c8d9cd'), backgroundColor: color('#fff') },
   small: { width: 12, height: 12, borderRadius: 3, borderWidth: 1 },

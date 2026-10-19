@@ -1,11 +1,14 @@
 import Pressable from '@/components/feedback-pressable';
-import AppearanceMenu from '@/components/appearance-menu';
 import { useHabitAttention } from '@/hooks/habit-attention';
-import { useAppearance } from '@/theme/appearance';
+import { accentTextColor, useAppearance } from '@/theme/appearance';
+import SettingsTab from '@/components/settings-tab';
+import NavTabFace, { NavTabIcon } from '@/components/nav-tab-face';
+import { useSectionMotion } from '@/components/section-motion';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Animated, AppState, Easing, Platform, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function HabitFlame() {
   const [motion] = useState(() => new Animated.Value(0));
@@ -36,39 +39,66 @@ function HabitFlame() {
   ] }]}>🔥</Animated.Text>;
 }
 
-export default function SectionTabs({ active }: { active: 'tasks' | 'habits' | 'agenda' }) {
-  const { agendaView, agendaDate } = useLocalSearchParams<{ agendaView?: string; agendaDate?: string }>();
+type Section = 'tasks' | 'habits' | 'agenda' | 'settings';
+
+function slideDirection(from: Section, to: Section): 'left' | 'right' | null {
+  if (from === to) return null;
+  if (from === 'tasks') return 'right';
+  if (from === 'settings') return 'left';
+  if (from === 'habits') return to === 'tasks' ? 'left' : 'right';
+  return to === 'settings' ? 'right' : 'left';
+}
+
+export default function SectionTabs({ active }: { active: Section }) {
+  const { agendaView, agendaDate, day } = useLocalSearchParams<{ agendaView?: string; agendaDate?: string; day?: string }>();
   const { preferences } = useAppearance();
+  const requestSectionMotion = useSectionMotion();
+  const insets = useSafeAreaInsets();
   const attention = useHabitAttention();
-  const taskSoft = `${preferences.tasks}${preferences.dark ? '26' : '18'}`;
-  const agendaColor = preferences.agenda;
-  const agendaSoft = `${agendaColor}${preferences.dark ? '26' : '18'}`;
-  const habitSoft = `${preferences.habits}${preferences.dark ? '26' : '18'}`;
+  const taskTextColor = accentTextColor(preferences.tasks, preferences.dark);
+  const habitTextColor = accentTextColor(preferences.habits, preferences.dark);
+  const agendaTextColor = accentTextColor(preferences.agenda, preferences.dark);
+  const inactive = preferences.dark ? '#a6adb8' : '#80868b';
+  function navigate(to: Section) {
+    const direction = slideDirection(active, to);
+    const pathname = to === 'tasks' ? '/' : to === 'habits' ? '/habitos' : to === 'agenda' ? '/agenda' : '/ajustes';
+    const clearAgendaDay = to === 'tasks' && Boolean(day);
+    if (direction) requestSectionMotion(pathname, direction, clearAgendaDay);
+    if (to === 'tasks' && day) router.setParams({ day: undefined, agendaView: undefined, agendaDate: undefined });
+    else if (to === 'tasks') router.navigate('/');
+    else if (to === 'habits') router.navigate('/habitos');
+    else if (to === 'agenda') router.navigate({ pathname: '/agenda', params: { ...(agendaView ? { view: agendaView } : {}), ...(agendaDate ? { date: agendaDate } : {}) } });
+    else if (to === 'settings') router.navigate('/ajustes');
+  }
   return (
-    <View style={styles.row}>
-      <Pressable accessibilityRole="tab" accessibilityLabel="Tareas" aria-selected={active === 'tasks'} accessibilityState={{ selected: active === 'tasks' }} onPress={() => router.navigate('/')} style={[styles.tab, active !== 'tasks' && styles.collapsed, active === 'tasks' && { backgroundColor: taskSoft }]}>
-        <View style={[styles.taskIcon, { backgroundColor: taskSoft }]}><MaterialIcons name="done-all" size={22} color={preferences.tasks} /></View>
-        {active === 'tasks' && <Text style={[styles.label, { color: preferences.tasks }]}>Tareas</Text>}
+    <View style={[styles.bar, { backgroundColor: preferences.dark ? '#22252b' : '#fff', borderColor: preferences.dark ? '#3a4049' : '#e7ebf0', paddingBottom: Math.max(insets.bottom, 8) }]}>
+      <Pressable accessibilityRole="tab" accessibilityLabel="Tareas" aria-selected={active === 'tasks'} accessibilityState={{ selected: active === 'tasks' }} onPress={() => navigate('tasks')} style={styles.tab}>
+        <NavTabFace active={active === 'tasks'} accent={preferences.tasks} dark={preferences.dark}>
+          <NavTabIcon active={active === 'tasks'}><MaterialIcons name="checklist" size={25} color={active === 'tasks' ? taskTextColor : inactive} /></NavTabIcon>
+          <Text style={[styles.label, { color: active === 'tasks' ? taskTextColor : inactive }]}>Tareas</Text>
+        </NavTabFace>
       </Pressable>
-      <Pressable accessibilityRole="tab" accessibilityLabel="Hábitos" aria-selected={active === 'habits'} accessibilityState={{ selected: active === 'habits' }} onPress={() => router.navigate('/habitos')} style={[styles.tab, active !== 'habits' && styles.collapsed, active === 'habits' && { backgroundColor: habitSoft }]}>
-        <View style={[styles.habitIcon, { backgroundColor: habitSoft }]}><MaterialIcons name="calendar-today" size={19} color={preferences.habits} />{attention && <HabitFlame />}</View>
-        {active === 'habits' && <Text style={[styles.label, { color: preferences.habits }]}>Hábitos</Text>}
+      <Pressable accessibilityRole="tab" accessibilityLabel="Hábitos" aria-selected={active === 'habits'} accessibilityState={{ selected: active === 'habits' }} onPress={() => navigate('habits')} style={styles.tab}>
+        <NavTabFace active={active === 'habits'} accent={preferences.habits} dark={preferences.dark}>
+          <NavTabIcon active={active === 'habits'}><View style={styles.iconWrap}><MaterialIcons name="calendar-today" size={22} color={active === 'habits' ? habitTextColor : inactive} />{attention && <HabitFlame />}</View></NavTabIcon>
+          <Text style={[styles.label, { color: active === 'habits' ? habitTextColor : inactive }]}>Hábitos</Text>
+        </NavTabFace>
       </Pressable>
-      <Pressable accessibilityRole="tab" accessibilityLabel="Agenda" aria-selected={active === 'agenda'} accessibilityState={{ selected: active === 'agenda' }} onPress={() => router.navigate(agendaView ? { pathname: '/agenda', params: { view: agendaView, date: agendaDate } } : '/agenda')} style={[styles.tab, active !== 'agenda' && styles.collapsed, active === 'agenda' && { backgroundColor: agendaSoft }]}>
-        <View style={[styles.taskIcon, { backgroundColor: agendaSoft }]}><MaterialIcons name="event-note" size={22} color={agendaColor} /></View>
-        {active === 'agenda' && <Text style={[styles.label, { color: agendaColor }]}>Agenda</Text>}
+      <Pressable accessibilityRole="tab" accessibilityLabel="Agenda" aria-selected={active === 'agenda'} accessibilityState={{ selected: active === 'agenda' }} onPress={() => navigate('agenda')} style={styles.tab}>
+        <NavTabFace active={active === 'agenda'} accent={preferences.agenda} dark={preferences.dark}>
+          <NavTabIcon active={active === 'agenda'}><MaterialIcons name="event-note" size={24} color={active === 'agenda' ? agendaTextColor : inactive} /></NavTabIcon>
+          <Text style={[styles.label, { color: active === 'agenda' ? agendaTextColor : inactive }]}>Agenda</Text>
+        </NavTabFace>
       </Pressable>
-      <AppearanceMenu />
+      <SettingsTab active={active === 'settings'} inactiveColor={inactive} onPress={() => navigate('settings')} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 18, gap: 6 },
-  tab: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 5, paddingRight: 8, borderRadius: 15 },
-  collapsed: { paddingRight: 5, gap: 0 },
-  taskIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  habitIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  bar: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', minHeight: 62, paddingTop: 7, paddingHorizontal: 0, borderTopWidth: StyleSheet.hairlineWidth },
+  tab: { width: '25%', flexGrow: 0, flexShrink: 0, height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 18, overflow: 'visible' },
+  iconWrap: { width: 25, height: 25, alignItems: 'center', justifyContent: 'center' },
   flame: { position: 'absolute', top: -5, right: -3, fontFamily: 'Manrope-Regular', fontSize: 13, lineHeight: 17, includeFontPadding: false },
-  label: { fontFamily: 'Manrope-SemiBold', fontSize: 16, fontWeight: 'normal', letterSpacing: -0.3 },
+  label: { fontFamily: 'Manrope-Medium', fontSize: 10, lineHeight: 13, fontWeight: 'normal' },
 });
