@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mejordia",
-    "slug": "mejordia",
+    "name": "Día Uno",
+    "slug": "dia-uno",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/branding/icon.png",
@@ -11,6 +11,7 @@
       "bundleIdentifier": "com.lobato.mejordia"
     },
     "android": {
+      "permissions": ["SCHEDULE_EXACT_ALARM"],
       "adaptiveIcon": {
         "backgroundColor": "#1a73e8",
         "foregroundImage": "./assets/branding/foreground.png",
@@ -35,7 +36,8 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await run(async () => {
       if (!supabase) throw new Error('Falta configurar Supabase en .env.local.');
       if (Platform.OS !== 'web' && Constants.appOwnership === 'expo') {
-        throw new Error('Para probar Google usa la vista web o una compilación de desarrollo de mejordia.');
+        throw new Error('Para probar Google usa la vista web o una compilación de desarrollo de Día Uno.');
       }
       const redirectTo = authRedirectUrl();
       const { data, error: authError } = await supabase.auth.signInWithOAuth({

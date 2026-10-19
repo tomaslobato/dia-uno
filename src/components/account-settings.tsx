@@ -12,7 +12,7 @@ export default function AccountSettings() {
   const actionLabel = busy ? 'Un momento…' : !ready ? 'Cargando cuenta…' : session ? 'Cerrar sesión' : 'Continuar con Google';
   return <View style={[styles.section, { borderBottomColor: border }]}>
     <Text style={[styles.title, { color: text }]}>Cuenta</Text>
-    <Text style={{ color: muted }}>{session ? session.user.email ?? 'Sesión iniciada' : 'Puedes seguir usando mejordia sin iniciar sesión.'}</Text>
+    <Text style={{ color: muted }}>{session ? session.user.email ?? 'Sesión iniciada' : 'Puedes seguir usando Día Uno sin iniciar sesión.'}</Text>
     <Pressable accessibilityRole="button" accessibilityLabel={actionLabel} disabled={!ready || busy} onPress={() => void (session ? signOut() : signIn())} style={[styles.button, { borderColor: border, opacity: !ready || busy ? 0.5 : 1 }]}>
       <MaterialIcons name={session ? 'logout' : 'login'} size={20} color={text} />
       <Text style={{ color: text }}>{actionLabel}</Text>

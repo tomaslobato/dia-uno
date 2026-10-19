@@ -13,7 +13,7 @@ type AppearanceContext = {
   ready: boolean;
   error: string | null;
 };
-const defaultAccents: AccentPreferences = { tasks: '#1a73e8', habits: '#d65c66', agenda: '#8755c5' };
+const defaultAccents: AccentPreferences = { tasks: '#1a73e8', habits: '#d65c66', agenda: '#bf4f91' };
 const Context = createContext<AppearanceContext | null>(null);
 const validThemeModes: ThemeMode[] = ['system', 'light', 'dark'];
 const isColor = (value: unknown): value is string => typeof value === 'string' && /^#[a-f\d]{6}$/i.test(value);
@@ -64,7 +64,8 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
         // Older preferences stored only a dark boolean. Keep an explicit dark choice;
         // old light defaults return to system mode so the new default follows the device.
         setThemeMode(storedMode ?? (stored.dark ? 'dark' : 'system'));
-        setAccents({ ...defaultAccents, tasks: stored.tasks, habits: stored.habits, agenda: stored.agenda ?? defaultAccents.agenda });
+        const agenda = stored.agenda === '#8755c5' || stored.agenda === '#188038' ? defaultAccents.agenda : stored.agenda ?? defaultAccents.agenda;
+        setAccents({ ...defaultAccents, tasks: stored.tasks, habits: stored.habits, agenda });
       }
       setReady(true);
     }).catch(() => { if (active) setError('No pudimos cargar la apariencia. Volvé a abrir la app.'); });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { staysInTaskSchedule, taskDateSection, formatDueDate, matchesTaskDate, compareTaskDueDate, createTask, isOverdue, parseTasks } from '../src/models/task.ts';
+import { staysInTaskSchedule, taskDateSection, formatDueDate, matchesTaskDate, compareTaskDueDate, createTask, getTaskReminderAt, isOverdue, parseTasks } from '../src/models/task.ts';
 
 const draft = { title: '  Comprar pan  ', description: ' Integral ', dueAt: null, hasTime: false };
 
@@ -10,6 +10,31 @@ test('task text is trimmed and a new task starts pending', () => {
   assert.equal(task.description, 'Integral');
   assert.equal(task.completed, false);
   assert.ok(task.id);
+  assert.equal(task.reminderMinutes, 30);
+});
+
+test('task reminders default to 30 minutes, can be disabled or customized, and old records migrate safely', () => {
+  const base = createTask(draft);
+  assert.equal(createTask({ ...draft, reminderMinutes: null }).reminderMinutes, null);
+  assert.equal(createTask({ ...draft, reminderMinutes: 45 }).reminderMinutes, 45);
+  const { reminderMinutes: _reminder, ...legacy } = base;
+  assert.equal(parseTasks(JSON.stringify([legacy]))[0].reminderMinutes, 30);
+  assert.throws(() => parseTasks(JSON.stringify([{ ...base, reminderMinutes: 0 }])));
+  assert.throws(() => parseTasks(JSON.stringify([{ ...base, reminderMinutes: 10081 }])));
+});
+
+test('date-only reminders use 9 AM as the reminder anchor and support day offsets', () => {
+  const dueAt = new Date(2026, 9, 20).toISOString();
+  const dateOnly = { ...createTask(draft), dueAt, hasTime: false, reminderMinutes: 1440 };
+  const reminder = new Date(getTaskReminderAt(dateOnly));
+  assert.equal(reminder.getFullYear(), 2026);
+  assert.equal(reminder.getMonth(), 9);
+  assert.equal(reminder.getDate(), 19);
+  assert.equal(reminder.getHours(), 9);
+  const thirtyMinutes = new Date(getTaskReminderAt({ ...dateOnly, reminderMinutes: 30 }));
+  assert.equal(thirtyMinutes.getDate(), 20);
+  assert.equal(thirtyMinutes.getHours(), 8);
+  assert.equal(thirtyMinutes.getMinutes(), 30);
 });
 
 test('stored completed tasks retain their date, time and identity', () => {

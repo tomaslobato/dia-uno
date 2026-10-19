@@ -1,5 +1,5 @@
 {
-  "name": "mejordia",
+  "name": "dia-uno",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
@@ -12,6 +12,7 @@
     "expo-dev-client": "~57.0.20",
     "expo-font": "~57.0.4",
     "expo-linking": "~57.0.13",
+    "expo-notifications": "~57.0.23",
     "expo-router": "~57.0.28",
     "expo-splash-screen": "~57.0.10",
     "expo-status-bar": "~57.0.1",
@@ -45,7 +46,7 @@
     "build:android": "eas build --platform android --profile development",
     "build:ios": "eas build --platform ios --profile development",
     "build:apk": "eas build --platform android --profile preview",
-    "build:apk:local": "expo prebuild --platform android && cd android && NODE_ENV=production ./gradlew assembleRelease --no-daemon --max-workers=2 && cd .. && mkdir -p artifacts && cp android/app/build/outputs/apk/release/app-release.apk artifacts/mejordia.apk",
+    "build:apk:local": "expo prebuild --platform android && cd android && NODE_ENV=production ./gradlew assembleRelease --no-daemon --max-workers=2 && cd .. && mkdir -p artifacts && cp android/app/build/outputs/apk/release/app-release.apk artifacts/dia-uno.apk",
     "test": "node --test --test-isolation=none tests/*.test.mjs"
   },
   "private": true

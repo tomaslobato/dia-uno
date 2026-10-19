@@ -48,6 +48,7 @@ export function taskFields(task: Partial<Task>): Record<string, unknown> {
   if ('repeatEvery' in task) fields.repetir_cada = task.repeatEvery;
   if ('repeatUnit' in task) fields.repetir_unidad = task.repeatUnit;
   if ('recurrenceId' in task) fields.recurrencia_id = task.recurrenceId;
+  if ('reminderMinutes' in task) fields.recordatorio_minutos = task.reminderMinutes;
   if ('createdAt' in task) fields.creada_en = task.createdAt;
   if ('dueAt' in task) {
     const date = task.dueAt ? new Date(task.dueAt) : null;
@@ -87,7 +88,8 @@ export function decodeRecords(value: unknown, owner: string): Records {
     if (due && (!Number.isFinite(due.getTime()) || dayKey(due) !== row.fecha)) throw new Error('Fecha inválida');
     return { id: row.id, listId: normalizeTaskListId(row.lista_id), title: row.nombre, description: row.descripcion, dueAt: due?.toISOString() ?? null,
       hasTime: row.hora !== null, starred: row.favorita, completed: row.realizada, createdAt: row.creada_en,
-      repeatEvery: row.repetir_cada ?? null, repeatUnit: row.repetir_unidad ?? null, recurrenceId: row.recurrencia_id ?? null };
+      repeatEvery: row.repetir_cada ?? null, repeatUnit: row.repetir_unidad ?? null, recurrenceId: row.recurrencia_id ?? null,
+      reminderMinutes: row.recordatorio_minutos === undefined ? 30 : row.recordatorio_minutos };
   });
   const habitRows: Habit[] = rows.habitos.map((row) => {
     if (!row || row.usuario_id !== owner) throw new Error('Propietario de datos inválido');

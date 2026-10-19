@@ -28,12 +28,26 @@ export default function TaskEditor({ task, initialDate, lists, initialListId, on
     return today;
   });
   const [hasTime, setHasTime] = useState(task?.hasTime ?? false);
+  const [reminderEnabled, setReminderEnabled] = useState(task?.reminderMinutes !== null);
+  const [reminderUnit, setReminderUnit] = useState<'minutes' | 'days'>(() => !task?.hasTime && Boolean(task?.reminderMinutes && task.reminderMinutes % 1440 === 0) ? 'days' : 'minutes');
+  const [reminderInterval, setReminderInterval] = useState(() => {
+    const minutes = task?.reminderMinutes ?? 30;
+    return String(!task?.hasTime && minutes % 1440 === 0 ? minutes / 1440 : minutes);
+  });
   const [repeatInterval, setRepeatInterval] = useState(task?.repeatEvery ? String(task.repeatEvery) : '1');
   const [repeatEnabled, setRepeatEnabled] = useState(Boolean(task?.repeatEvery));
   const [repeatUnit, setRepeatUnit] = useState<TaskRepeatUnit>(task?.repeatUnit ?? 'days');
   const focusTitle = useCallback(() => {
     titleInput.current?.focus();
   }, []);
+
+  function changeReminderUnit(unit: 'minutes' | 'days') {
+    if (unit === reminderUnit) return;
+    const value = Number.parseInt(reminderInterval, 10) || 30;
+    if (unit === 'days') setReminderInterval(String(Math.max(1, Math.min(7, Math.ceil(value / 1440)))));
+    else setReminderInterval(String(Math.max(1, Math.min(10080, value * 1440))));
+    setReminderUnit(unit);
+  }
 
   function finish() {
     if (closing.current) return;
@@ -42,7 +56,9 @@ export default function TaskEditor({ task, initialDate, lists, initialListId, on
       return;
     }
     const repeatEvery = date && repeatEnabled ? Math.max(1, Math.min(10000, Number.parseInt(repeatInterval, 10) || 1)) : null;
-    onSave({ listId, title, description, dueAt: date?.toISOString() ?? null, hasTime: Boolean(date && hasTime), repeatEvery, repeatUnit: repeatEvery ? repeatUnit : null, recurrenceId: task?.recurrenceId }, task?.id);
+    const reminderValue = Number.parseInt(reminderInterval, 10) || 30;
+    const reminderMinutes = reminderEnabled ? Math.max(1, Math.min(10080, reminderValue * (reminderUnit === 'days' ? 1440 : 1))) : null;
+    onSave({ listId, title, description, dueAt: date?.toISOString() ?? null, hasTime: Boolean(date && hasTime), repeatEvery, repeatUnit: repeatEvery ? repeatUnit : null, recurrenceId: task?.recurrenceId, reminderMinutes }, task?.id);
     closing.current = true;
     Keyboard.dismiss();
     onClose();
@@ -57,6 +73,7 @@ export default function TaskEditor({ task, initialDate, lists, initialListId, on
 
   function addDate(withTime: boolean) {
     Keyboard.dismiss();
+    if (withTime) changeReminderUnit('minutes');
     if (!date) {
       const initial = new Date();
       initial.setHours(withTime ? initial.getHours() + 1 : 12, 0, 0, 0);
@@ -123,16 +140,14 @@ export default function TaskEditor({ task, initialDate, lists, initialListId, on
               </Pressable>
             </View>
             {date && <DateField value={date} hasTime={hasTime} onChange={setDate} />}
-            {date && <>
-              <View style={styles.dateHeader}>
+            {date && <View style={styles.scheduleSections}>
+              <View style={[styles.scheduleColumn, styles.repeatColumn]}>
                 <Text style={styles.dateLabel}>REPETIR</Text>
-                <Pressable onPress={() => setRepeatEnabled((enabled) => !enabled)} accessibilityRole="switch" accessibilityLabel="Repetir tarea" accessibilityState={{ checked: repeatEnabled }} style={styles.repeatToggle}>
-                  <Text style={styles.removeDate}>{repeatEnabled ? 'Quitar' : 'No repetir'}</Text>
-                  <MaterialIcons name={repeatEnabled ? 'repeat' : 'repeat'} size={16} color={repeatEnabled ? color('#1a73e8') : color('#80868b')} />
+                <Pressable onPress={() => setRepeatEnabled((enabled) => !enabled)} accessibilityRole="switch" accessibilityLabel="Repetir tarea" accessibilityState={{ checked: repeatEnabled }} style={[styles.sectionToggle, repeatEnabled && styles.optionSelected]}>
+                  <MaterialIcons name="repeat" size={16} color={color(repeatEnabled ? '#1a73e8' : '#80868b')} />
+                  <Text style={[styles.removeDate, repeatEnabled && styles.optionTextSelected]}>{repeatEnabled ? 'Quitar' : 'No repetir'}</Text>
                 </Pressable>
-              </View>
-              {repeatEnabled && <>
-                <View style={styles.repeatControls}>
+                {repeatEnabled && <>
                   <Text style={styles.repeatLabel}>Repetir cada</Text>
                   <View style={styles.stepper}>
                     <Pressable onPress={() => setRepeatInterval(String(Math.max(1, (Number.parseInt(repeatInterval, 10) || 1) - 1)))} accessibilityRole="button" accessibilityLabel="Reducir intervalo" style={styles.stepperButton}><MaterialIcons name="remove" size={18} color={color('#5f6368')} /></Pressable>
@@ -144,10 +159,37 @@ export default function TaskEditor({ task, initialDate, lists, initialListId, on
                       <Text style={[styles.optionText, repeatUnit === option.value && styles.optionTextSelected]}>{option.label}</Text>
                     </Pressable>)}
                   </View>
-                </View>
-                <Text style={styles.recurrenceHint}>Al completarla, se creará la siguiente para la próxima fecha.</Text>
-              </>}
-            </>}
+                  <Text style={styles.recurrenceHint}>Al completarla, se creará la siguiente.</Text>
+                </>}
+              </View>
+              <View style={styles.scheduleColumn}>
+                <Text style={styles.dateLabel}>RECORDATORIO</Text>
+                <Pressable onPress={() => setReminderEnabled((enabled) => !enabled)} accessibilityRole="switch" accessibilityLabel="Recordatorio de la tarea" accessibilityState={{ checked: reminderEnabled }} style={[styles.sectionToggle, reminderEnabled && styles.optionSelected]}>
+                  <MaterialIcons name={reminderEnabled ? 'notifications-active' : 'notifications-off'} size={16} color={color(reminderEnabled ? '#1a73e8' : '#80868b')} />
+                  <Text style={[styles.removeDate, reminderEnabled && styles.optionTextSelected]}>{reminderEnabled ? 'Desactivar' : 'Activar'}</Text>
+                </Pressable>
+                {reminderEnabled && hasTime ? <>
+                  <Text style={styles.repeatLabel}>Minutos antes</Text>
+                  <View style={styles.stepper}>
+                    <Pressable onPress={() => setReminderInterval(String(Math.max(1, (Number.parseInt(reminderInterval, 10) || 30) - 1)))} accessibilityRole="button" accessibilityLabel="Reducir minutos del recordatorio" style={styles.stepperButton}><MaterialIcons name="remove" size={18} color={color('#5f6368')} /></Pressable>
+                    <TextInput value={reminderInterval} onChangeText={(value) => setReminderInterval(value.replace(/[^0-9]/g, '').slice(0, 5))} onBlur={() => setReminderInterval(String(Math.max(1, Math.min(10080, Number.parseInt(reminderInterval, 10) || 30))))} keyboardType="number-pad" selectTextOnFocus accessibilityLabel="Minutos antes de la tarea" style={styles.intervalInput} maxLength={5} />
+                    <Pressable onPress={() => setReminderInterval(String(Math.min(10080, (Number.parseInt(reminderInterval, 10) || 0) + 1)))} accessibilityRole="button" accessibilityLabel="Aumentar minutos del recordatorio" style={styles.stepperButton}><MaterialIcons name="add" size={18} color={color('#5f6368')} /></Pressable>
+                  </View>
+                </> : reminderEnabled ? <>
+                  <View style={styles.reminderUnits}>
+                    {([{ value: 'minutes', label: 'Minutos' }, { value: 'days', label: 'Días' }] as const).map((option) => <Pressable key={option.value} onPress={() => changeReminderUnit(option.value)} accessibilityRole="radio" accessibilityLabel={`${option.label} antes`} accessibilityState={{ checked: reminderUnit === option.value }} aria-checked={reminderUnit === option.value} style={[styles.unitOption, reminderUnit === option.value && styles.optionSelected]}>
+                      <Text style={[styles.optionText, reminderUnit === option.value && styles.optionTextSelected]}>{option.label}</Text>
+                    </Pressable>)}
+                  </View>
+                  <Text style={styles.repeatLabel}>{reminderUnit === 'days' ? 'Días antes' : 'Minutos antes'}</Text>
+                  <View style={styles.stepper}>
+                    <Pressable onPress={() => setReminderInterval(String(Math.max(1, (Number.parseInt(reminderInterval, 10) || 1) - 1)))} accessibilityRole="button" accessibilityLabel={`Reducir ${reminderUnit === 'days' ? 'días' : 'minutos'} del recordatorio`} style={styles.stepperButton}><MaterialIcons name="remove" size={18} color={color('#5f6368')} /></Pressable>
+                    <TextInput value={reminderInterval} onChangeText={(value) => setReminderInterval(value.replace(/[^0-9]/g, '').slice(0, 5))} onBlur={() => setReminderInterval(String(Math.max(1, Math.min(reminderUnit === 'days' ? 7 : 10080, Number.parseInt(reminderInterval, 10) || 1))))} keyboardType="number-pad" selectTextOnFocus accessibilityLabel={reminderUnit === 'days' ? 'Días antes de la tarea' : 'Minutos antes de la tarea'} style={styles.intervalInput} maxLength={5} />
+                    <Pressable onPress={() => setReminderInterval(String(Math.min(reminderUnit === 'days' ? 7 : 10080, (Number.parseInt(reminderInterval, 10) || 0) + 1)))} accessibilityRole="button" accessibilityLabel={`Aumentar ${reminderUnit === 'days' ? 'días' : 'minutos'} del recordatorio`} style={styles.stepperButton}><MaterialIcons name="add" size={18} color={color('#5f6368')} /></Pressable>
+                  </View>
+                </> : null}
+              </View>
+            </View>}
             <View style={styles.hint}><MaterialIcons name="done-all" size={16} color={color('#80868b')} /><Text style={styles.hintText}>Toca Listo para guardar los cambios.</Text></View>
           </ScrollView>
         </View>
@@ -191,7 +233,11 @@ const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   hintText: { color: color('#80868b'), fontFamily: 'Manrope-Regular', fontSize: 11, flexShrink: 1 },
   recurrenceHint: { color: color('#80868b'), fontFamily: 'Manrope-Regular', fontSize: 11, marginTop: -8 },
   repeatToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, minHeight: 38, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: color('#e8f0fe') },
-  repeatControls: { flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap' },
+  scheduleSections: { flexDirection: 'row', gap: 14 },
+  scheduleColumn: { flex: 1, minWidth: 0, gap: 8, alignItems: 'flex-start' },
+  repeatColumn: { borderRightWidth: 1, borderRightColor: color('#edf0f3'), paddingRight: 12 },
+  sectionToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 36, maxWidth: '100%', paddingHorizontal: 9, paddingVertical: 7, borderRadius: 12, backgroundColor: color('#f1f4f2') },
+  reminderUnits: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 },
   repeatLabel: { fontFamily: 'Manrope-Medium', fontSize: 13, color: color('#5f6368') },
   stepper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: color('#e1e5ea'), borderRadius: 12, height: 40 },
   stepperButton: { width: 34, height: 38, alignItems: 'center', justifyContent: 'center' },

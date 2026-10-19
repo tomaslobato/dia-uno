@@ -13,9 +13,10 @@ export type Task = {
   repeatEvery: number | null;
   repeatUnit: TaskRepeatUnit | null;
   recurrenceId: string | null;
+  reminderMinutes: number | null;
 };
 
-export type TaskDraft = Pick<Task, 'title' | 'description' | 'dueAt' | 'hasTime'> & { listId?: string | null; repeatEvery?: number | null; repeatUnit?: TaskRepeatUnit | null; recurrenceId?: string | null };
+export type TaskDraft = Pick<Task, 'title' | 'description' | 'dueAt' | 'hasTime'> & { listId?: string | null; repeatEvery?: number | null; repeatUnit?: TaskRepeatUnit | null; recurrenceId?: string | null; reminderMinutes?: number | null };
 
 export function createTask(draft: TaskDraft, now = new Date()): Task {
   const id = `${now.getTime()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -33,6 +34,7 @@ export function createTask(draft: TaskDraft, now = new Date()): Task {
     repeatEvery,
     repeatUnit,
     recurrenceId: repeatEvery === null ? null : draft.recurrenceId ?? id,
+    reminderMinutes: draft.reminderMinutes === undefined ? 30 : draft.reminderMinutes,
   };
 }
 
@@ -56,6 +58,13 @@ export function nextRecurringDueAt(task: Task, now = new Date(), anchorDueAt?: s
   return dueDay.toISOString();
 }
 
+export function getTaskReminderAt(task: Task): number | null {
+  if (!task.dueAt || task.reminderMinutes === null) return null;
+  const due = new Date(task.dueAt);
+  if (!task.hasTime) due.setHours(9, 0, 0, 0);
+  return due.getTime() - task.reminderMinutes * 60_000;
+}
+
 export function parseTasks(value: string | null): Task[] {
   if (!value) return [];
   const parsed: unknown = JSON.parse(value);
@@ -66,7 +75,7 @@ export function parseTasks(value: string | null): Task[] {
     const repeatUnit = task.repeatUnit ?? (legacyRecurrence === 'weekly' ? 'weeks' : legacyRecurrence === 'monthly' || legacyRecurrence === 'yearly' ? 'months' : repeatEvery ? 'days' : null);
     const { recurrence: _legacy, ...current } = task as Task & { recurrence?: string };
     return { ...current, starred: task.starred ?? false, listId: normalizeTaskListId(task.listId), repeatEvery, repeatUnit,
-      recurrenceId: task.recurrenceId ?? (repeatEvery === null ? null : task.id) };
+      recurrenceId: task.recurrenceId ?? (repeatEvery === null ? null : task.id), reminderMinutes: task.reminderMinutes === undefined ? 30 : task.reminderMinutes };
   });
 }
 
@@ -82,6 +91,7 @@ function isTask(value: unknown): value is Task {
     (task.repeatEvery === undefined || task.repeatEvery === null || (typeof task.repeatEvery === 'number' && Number.isInteger(task.repeatEvery) && task.repeatEvery >= 1 && task.repeatEvery <= 10000)) &&
     (task.repeatUnit === undefined || task.repeatUnit === null || ['days', 'weeks', 'months'].includes(task.repeatUnit)) &&
     (task.recurrenceId === undefined || task.recurrenceId === null || typeof task.recurrenceId === 'string') &&
+    (task.reminderMinutes === undefined || task.reminderMinutes === null || (typeof task.reminderMinutes === 'number' && Number.isInteger(task.reminderMinutes) && task.reminderMinutes >= 1 && task.reminderMinutes <= 10080)) &&
     (task.dueAt === null || (typeof task.dueAt === 'string' && Number.isFinite(Date.parse(task.dueAt))))
   );
 }

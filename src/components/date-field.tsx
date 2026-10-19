@@ -29,7 +29,7 @@ export default function DateField({ value, hasTime, onChange }: DateFieldProps) 
       <View style={styles.row}>
         <Pressable accessibilityRole="button" accessibilityLabel="Elegir fecha" onPress={() => open('date')} style={styles.field}>
           <MaterialIcons name="calendar-today" size={18} color={color('#1a73e8')} />
-          <Text style={styles.label}>{value.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}</Text>
+          <Text style={styles.label}>{value.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
         </Pressable>
         {hasTime && <Pressable accessibilityRole="button" accessibilityLabel="Elegir hora" onPress={() => open('time')} style={styles.field}>
           <MaterialIcons name="schedule" size={18} color={color('#1a73e8')} />
@@ -41,7 +41,7 @@ export default function DateField({ value, hasTime, onChange }: DateFieldProps) 
   );
 }
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
-  container: { gap: 8 }, row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  field: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: color('#f0f5ff'), paddingHorizontal: 14, paddingVertical: 13, borderRadius: 12 },
-  label: { color: color('#185abc'), fontFamily: 'Manrope-Medium', fontSize: 14, fontWeight: 'normal' },
+  container: { gap: 8 }, row: { flexDirection: 'row', flexWrap: 'nowrap', gap: 8 },
+  field: { flexDirection: 'row', flexShrink: 0, alignItems: 'center', gap: 8, backgroundColor: color('#f0f5ff'), paddingHorizontal: 10, paddingVertical: 13, borderRadius: 12 },
+  label: { color: color('#185abc'), fontFamily: 'Manrope-Medium', fontSize: 13, fontWeight: 'normal' },
 });

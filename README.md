@@ -1,4 +1,4 @@
-# mejordia — Expo en Omarchy
+# Día Uno — Expo en Omarchy
 
 App de tareas inspirada en Google Tasks, construida con Expo SDK 57, React Native, TypeScript y Expo Router. El objetivo de distribución es un APK que se instala directamente en Android, sin tiendas y sin necesitar Expo Go ni la computadora para ejecutarse.
 
@@ -53,16 +53,16 @@ npm run build:apk:local
 
 La primera compilación descarga Gradle, dependencias nativas, NDK y CMake; puede tardar bastante. El APK queda en:
 
-`artifacts/mejordia.apk` (también está en `android/app/build/outputs/apk/release/app-release.apk`)
+`artifacts/dia-uno.apk` (también está en `android/app/build/outputs/apk/release/app-release.apk`)
 
 Incluye el código JavaScript y los recursos. Se puede copiar al teléfono y abrir allí, autorizando la instalación de apps desde esa fuente, o instalar por USB con depuración USB habilitada:
 
 ```bash
 adb devices
-adb install -r artifacts/mejordia.apk
+adb install -r artifacts/dia-uno.apk
 ```
 
-El APK universal incluye ARM y x86 y requiere Android 7.0 (API 24) o posterior. El identificador provisional es `com.lobato.mejordia`.
+El APK universal incluye ARM y x86 y requiere Android 7.0 (API 24) o posterior. El identificador de Android se conserva como `com.lobato.mejordia` para mantener la compatibilidad con instalaciones y el inicio de sesión.
 
 La plantilla firma la compilación local con una clave de desarrollo. Antes de distribuir una app real, configurá una clave de firma propia y guardala: futuras actualizaciones de una app instalada deben conservar el identificador y la firma. No compartas claves privadas en Git.
 

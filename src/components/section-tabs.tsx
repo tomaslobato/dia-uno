@@ -3,11 +3,10 @@ import { useHabitAttention } from '@/hooks/habit-attention';
 import { accentTextColor, useAppearance } from '@/theme/appearance';
 import SettingsTab from '@/components/settings-tab';
 import NavTabFace, { NavTabIcon } from '@/components/nav-tab-face';
-import { useSectionMotion } from '@/components/section-motion';
-import { MaterialIcons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { router, useLocalSearchParams, usePathname } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { AccessibilityInfo, Animated, AppState, Easing, Platform, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, AppState, Easing, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function HabitFlame() {
@@ -41,18 +40,13 @@ function HabitFlame() {
 
 type Section = 'tasks' | 'habits' | 'agenda' | 'settings';
 
-function slideDirection(from: Section, to: Section): 'left' | 'right' | null {
-  if (from === to) return null;
-  if (from === 'tasks') return 'right';
-  if (from === 'settings') return 'left';
-  if (from === 'habits') return to === 'tasks' ? 'left' : 'right';
-  return to === 'settings' ? 'right' : 'left';
-}
-
-export default function SectionTabs({ active }: { active: Section }) {
+export default function SectionTabs() {
+  const pathname = usePathname();
   const { agendaView, agendaDate, day } = useLocalSearchParams<{ agendaView?: string; agendaDate?: string; day?: string }>();
+  const active: Section = pathname === '/habitos' ? 'habits' : pathname === '/agenda' || Boolean(day) ? 'agenda' : pathname === '/ajustes' ? 'settings' : 'tasks';
   const { preferences } = useAppearance();
-  const requestSectionMotion = useSectionMotion();
+  const { width } = useWindowDimensions();
+  const desktop = width >= 768;
   const insets = useSafeAreaInsets();
   const attention = useHabitAttention();
   const taskTextColor = accentTextColor(preferences.tasks, preferences.dark);
@@ -60,10 +54,6 @@ export default function SectionTabs({ active }: { active: Section }) {
   const agendaTextColor = accentTextColor(preferences.agenda, preferences.dark);
   const inactive = preferences.dark ? '#a6adb8' : '#80868b';
   function navigate(to: Section) {
-    const direction = slideDirection(active, to);
-    const pathname = to === 'tasks' ? '/' : to === 'habits' ? '/habitos' : to === 'agenda' ? '/agenda' : '/ajustes';
-    const clearAgendaDay = to === 'tasks' && Boolean(day);
-    if (direction) requestSectionMotion(pathname, direction, clearAgendaDay);
     if (to === 'tasks' && day) router.setParams({ day: undefined, agendaView: undefined, agendaDate: undefined });
     else if (to === 'tasks') router.navigate('/');
     else if (to === 'habits') router.navigate('/habitos');
@@ -72,32 +62,33 @@ export default function SectionTabs({ active }: { active: Section }) {
   }
   return (
     <View style={[styles.bar, { backgroundColor: preferences.dark ? '#22252b' : '#fff', borderColor: preferences.dark ? '#3a4049' : '#e7ebf0', paddingBottom: Math.max(insets.bottom, 8) }]}>
-      <Pressable accessibilityRole="tab" accessibilityLabel="Tareas" aria-selected={active === 'tasks'} accessibilityState={{ selected: active === 'tasks' }} onPress={() => navigate('tasks')} style={styles.tab}>
+      <Pressable accessibilityRole="tab" accessibilityLabel="Tareas" aria-selected={active === 'tasks'} accessibilityState={{ selected: active === 'tasks' }} onPress={() => navigate('tasks')} style={desktop ? styles.desktopTab : styles.tab}>
         <NavTabFace active={active === 'tasks'} accent={preferences.tasks} dark={preferences.dark}>
           <NavTabIcon active={active === 'tasks'}><MaterialIcons name="checklist" size={25} color={active === 'tasks' ? taskTextColor : inactive} /></NavTabIcon>
           <Text style={[styles.label, { color: active === 'tasks' ? taskTextColor : inactive }]}>Tareas</Text>
         </NavTabFace>
       </Pressable>
-      <Pressable accessibilityRole="tab" accessibilityLabel="Hábitos" aria-selected={active === 'habits'} accessibilityState={{ selected: active === 'habits' }} onPress={() => navigate('habits')} style={styles.tab}>
+      <Pressable accessibilityRole="tab" accessibilityLabel="Hábitos" aria-selected={active === 'habits'} accessibilityState={{ selected: active === 'habits' }} onPress={() => navigate('habits')} style={desktop ? styles.desktopTab : styles.tab}>
         <NavTabFace active={active === 'habits'} accent={preferences.habits} dark={preferences.dark}>
-          <NavTabIcon active={active === 'habits'}><View style={styles.iconWrap}><MaterialIcons name="calendar-today" size={22} color={active === 'habits' ? habitTextColor : inactive} />{attention && <HabitFlame />}</View></NavTabIcon>
+          <NavTabIcon active={active === 'habits'}><View style={styles.iconWrap}>{active === 'habits' ? <MaterialIcons name="local-fire-department" size={25} color={habitTextColor} /> : <Ionicons name="flame" size={24} color={inactive} />}{attention && <HabitFlame />}</View></NavTabIcon>
           <Text style={[styles.label, { color: active === 'habits' ? habitTextColor : inactive }]}>Hábitos</Text>
         </NavTabFace>
       </Pressable>
-      <Pressable accessibilityRole="tab" accessibilityLabel="Agenda" aria-selected={active === 'agenda'} accessibilityState={{ selected: active === 'agenda' }} onPress={() => navigate('agenda')} style={styles.tab}>
+      <Pressable accessibilityRole="tab" accessibilityLabel="Agenda" aria-selected={active === 'agenda'} accessibilityState={{ selected: active === 'agenda' }} onPress={() => navigate('agenda')} style={desktop ? styles.desktopTab : styles.tab}>
         <NavTabFace active={active === 'agenda'} accent={preferences.agenda} dark={preferences.dark}>
           <NavTabIcon active={active === 'agenda'}><MaterialIcons name="event-note" size={24} color={active === 'agenda' ? agendaTextColor : inactive} /></NavTabIcon>
           <Text style={[styles.label, { color: active === 'agenda' ? agendaTextColor : inactive }]}>Agenda</Text>
         </NavTabFace>
       </Pressable>
-      <SettingsTab active={active === 'settings'} inactiveColor={inactive} onPress={() => navigate('settings')} />
+      <SettingsTab active={active === 'settings'} desktop={desktop} inactiveColor={inactive} onPress={() => navigate('settings')} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bar: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', minHeight: 62, paddingTop: 7, paddingHorizontal: 0, borderTopWidth: StyleSheet.hairlineWidth },
+  bar: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: 62, paddingTop: 7, paddingHorizontal: 0, borderTopWidth: StyleSheet.hairlineWidth },
   tab: { width: '25%', flexGrow: 0, flexShrink: 0, height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 18, overflow: 'visible' },
+  desktopTab: { width: 120, flexGrow: 0, flexShrink: 0, height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 18, overflow: 'visible' },
   iconWrap: { width: 25, height: 25, alignItems: 'center', justifyContent: 'center' },
   flame: { position: 'absolute', top: -5, right: -3, fontFamily: 'Manrope-Regular', fontSize: 13, lineHeight: 17, includeFontPadding: false },
   label: { fontFamily: 'Manrope-Medium', fontSize: 10, lineHeight: 13, fontWeight: 'normal' },

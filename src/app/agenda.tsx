@@ -11,7 +11,7 @@ import AgendaTaskEntry from '@/components/agenda-task-entry';
 import HabitModal from '@/components/habit-modal';
 import TaskEditor from '@/components/task-editor';
 import { useTaskDeletion } from '@/hooks/use-task-deletion';
-import SectionTabs from '@/components/section-tabs';
+import { SectionEntrance } from '@/components/section-motion';
 import { useSectionStyles } from '@/theme/appearance';
 import { useTasks } from '@/hooks/use-tasks';
 import { dayKey, localDay } from '@/models/habit';
@@ -116,26 +116,25 @@ export default function AgendaScreen() {
   }
   return <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
     <View style={styles.page}>
-      <View style={styles.toolbar}>
+      <SectionEntrance section="/agenda" order={0}><View style={styles.toolbar}>
         <View style={styles.monthBlock}><Text accessibilityRole="header" style={styles.monthTitle}>{monthTitle.charAt(0).toUpperCase() + monthTitle.slice(1)}</Text><Text style={styles.viewLabel}>{detailed ? (weekly ? 'Vista semanal' : `Vista de ${dayCount} días`) : 'Vista mensual'}</Text></View>
         <Pressable accessibilityRole="button" accessibilityLabel={detailed ? (weekly ? "Volver a la semana actual" : "Volver a hoy") : "Volver al mes actual"} onPress={() => { setWeekAnchor(now); setMonth(new Date(now.getFullYear(), now.getMonth(), 1, 12)); }} style={styles.todayButton}><Text style={styles.todayText}>Hoy</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={detailed ? (weekly ? "Semana anterior" : `${dayCount} días anteriores`) : "Mes anterior"} onPress={() => changePeriod(-1)} style={styles.arrow}><MaterialIcons name="chevron-left" size={24} color={color('#202124')} /></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={detailed ? (weekly ? "Semana siguiente" : `${dayCount} días siguientes`) : "Mes siguiente"} onPress={() => changePeriod(1)} style={styles.arrow}><MaterialIcons name="chevron-right" size={24} color={color('#202124')} /></Pressable>
-      </View>
-      <View style={styles.viewSwitch}>{viewOptions.map(({ value, label }) => <Pressable key={value} accessibilityRole="button" accessibilityLabel={`Vista ${label.toLowerCase()}`} accessibilityState={{ selected: effectiveView === value }} aria-pressed={effectiveView === value} onPress={() => changeView(value)} style={[styles.viewButton, effectiveView === value && { backgroundColor: soft }]}><Text style={[styles.viewButtonText, effectiveView === value && { color: accentText }]}>{label}</Text></Pressable>)}</View>
+      </View></SectionEntrance>
+      <SectionEntrance section="/agenda" order={1}><View style={styles.viewSwitch}>{viewOptions.map(({ value, label }) => <Pressable key={value} accessibilityRole="button" accessibilityLabel={`Vista ${label.toLowerCase()}`} accessibilityState={{ selected: effectiveView === value }} aria-pressed={effectiveView === value} onPress={() => changeView(value)} style={[styles.viewButton, effectiveView === value && { backgroundColor: soft }]}><Text style={[styles.viewButtonText, effectiveView === value && { color: accentText }]}>{label}</Text></Pressable>)}</View></SectionEntrance>
       {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
       {!ready && !error && <ActivityIndicator color={accent} />}
-      <AgendaPager enabled={mobile && effectiveView === '3'} pageKey={`${effectiveView}-${dayKey(weekAnchor)}`} onStep={changePeriod} renderNeighbor={renderCalendar}>
+      <SectionEntrance section="/agenda" order={2} style={{ flex: 1 }}><AgendaPager enabled={mobile && effectiveView === '3'} pageKey={`${effectiveView}-${dayKey(weekAnchor)}`} onStep={changePeriod} renderNeighbor={renderCalendar}>
         {renderCalendar(0)}
-      </AgendaPager>
-      <View style={styles.legend}><View style={styles.overdueDot} /><Text style={styles.legendText}>Pendientes atrasadas</Text><Text style={styles.legendText}>· Completadas en gris</Text></View>
-      {removedId && <View accessibilityLiveRegion="polite" style={[styles.undoBar, { bottom: 98 }]}><Text style={styles.undoMessage}>Tarea eliminada</Text><Pressable accessibilityRole="button" accessibilityLabel="Deshacer eliminación" onPress={undoDelete} style={styles.undoButton}><Text style={styles.undoText}>Deshacer</Text></Pressable></View>}
-      <View pointerEvents="box-none" style={[styles.newTaskWrap, { bottom: 70 + Math.max(insets.bottom, 8) }]}>
+      </AgendaPager></SectionEntrance>
+      <SectionEntrance section="/agenda" order={3}><View style={styles.legend}><View style={styles.overdueDot} /><Text style={styles.legendText}>Pendientes atrasadas</Text><Text style={styles.legendText}>· Completadas en gris</Text></View></SectionEntrance>
+      {removedId && <View accessibilityLiveRegion="polite" style={[styles.undoBar, { bottom: 98 - (59 + Math.max(insets.bottom, 8)) }]}><Text style={styles.undoMessage}>Tarea eliminada</Text><Pressable accessibilityRole="button" accessibilityLabel="Deshacer eliminación" onPress={undoDelete} style={styles.undoButton}><Text style={styles.undoText}>Deshacer</Text></Pressable></View>}
+      <View pointerEvents="box-none" style={[styles.newTaskWrap, { bottom: 11 }]}>
         <Pressable disabled={!ready} accessibilityRole="button" accessibilityLabel="Nueva tarea" onPress={() => setCreatingTask(true)} style={[styles.newTaskButton, !ready && { opacity: 0.5 }]}>
           <MaterialIcons name="add" size={24} color="#fff" /><Text style={styles.newTaskLabel}>Nueva tarea</Text>
         </Pressable>
       </View>
-      <SectionTabs active="agenda" />
     </View>
     {(editingTask || creatingTask) && <TaskEditor key={editingTask?.id ?? 'new-agenda-task'} task={editingTask} initialDate={creatingTask && !editingTask ? new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12) : undefined} lists={lists} initialListId={editingTask?.listId ?? null} onSave={saveTask} onToggle={toggleTask} onStar={toggleStar} onDelete={removeTask} onClose={() => { setEditingId(null); setCreatingTask(false); }} />}
     {editingHabit && <HabitModal key={editingHabit.id} habit={editingHabit} today={today} onClose={() => setEditingHabitId(null)} onSave={(name, interval, description) => updateHabit(editingHabit.id, name, interval, description)} onToggle={(day) => toggleDay(editingHabit.id, day)} onDelete={() => deleteHabit(editingHabit.id)} />}

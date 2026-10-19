@@ -3,7 +3,7 @@ export function getAuthCode(url: string, redirectUrl: string): string {
   const received = new URL(url);
   const expected = new URL(redirectUrl);
   if (received.protocol !== expected.protocol || received.host !== expected.host || received.pathname !== expected.pathname) {
-    throw new Error('La dirección de regreso no corresponde a mejordia.');
+    throw new Error('La dirección de regreso no corresponde a Día Uno.');
   }
   const params = received.searchParams;
   const hash = new URLSearchParams(received.hash.slice(1));

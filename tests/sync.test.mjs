@@ -48,6 +48,17 @@ test('task wire fields preserve local date/time, date-only tasks and all flags',
   assert.deepEqual(encodeMutation({ entity: 'tasks', action: 'patch', id: 't', mutationId: 'p', patch: { starred: true } }).campos, { favorita: true });
   assert.throws(() => decodeRecords({ tareas: [{ usuario_id: 'user-b' }], habitos: [] }, owner));
 });
+test('task reminder lead time syncs to Supabase and nullable lead time disables it', () => {
+  const owner = 'user-a';
+  const t = { ...task(), dueAt: new Date(2026, 9, 20, 9, 0).toISOString(), hasTime: true, reminderMinutes: 45 };
+  const fields = encodeMutation(mutation(t)).campos;
+  assert.equal(fields.recordatorio_minutos, 45);
+  const decoded = decodeRecords({ tareas: [{ ...fields, id: t.id, usuario_id: owner }], habitos: [] }, owner).tasks[0];
+  assert.equal(decoded.reminderMinutes, 45);
+  assert.equal(encodeMutation({ entity: 'tasks', action: 'patch', id: t.id, mutationId: 'p', patch: { reminderMinutes: null } }).campos.recordatorio_minutos, null);
+  const legacy = { ...fields }; delete legacy.recordatorio_minutos;
+  assert.equal(decodeRecords({ tareas: [{ ...legacy, id: t.id, usuario_id: owner }], habitos: [] }, owner).tasks[0].reminderMinutes, 30);
+});
 test('old habits gain an empty description and full habits retain history and frequency', () => {
   const h = createHabit('Caminar', 3, new Date(), 'En el parque');
   const { description, ...legacy } = h;

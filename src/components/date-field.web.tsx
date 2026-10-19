@@ -26,4 +26,4 @@ export default function DateField({ value, hasTime, onChange }: DateFieldProps) 
     }} />}
   </View>;
 }
-const styles = StyleSheet.create({ row: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' } });
+const styles = StyleSheet.create({ row: { flexDirection: 'row', gap: 8, flexWrap: 'nowrap' } });

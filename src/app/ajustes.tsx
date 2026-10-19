@@ -1,20 +1,32 @@
 import AccountSettings from '@/components/account-settings';
 import AppearanceSettings from '@/components/appearance-settings';
-import SectionTabs from '@/components/section-tabs';
+import { SectionEntrance } from '@/components/section-motion';
 import { useSectionStyles } from '@/theme/appearance';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 
 export default function SettingsScreen() {
   const { styles } = useSectionStyles(makeStyles, 'tasks');
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
+  const scrollRef = useRef<ScrollView>(null);
+  const [appearanceY, setAppearanceY] = useState<number | null>(null);
+  useEffect(() => {
+    if (focus !== 'personalizacion' || appearanceY === null) return;
+    const frame = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, appearanceY - 8), animated: true });
+      router.setParams({ focus: undefined });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [appearanceY, focus]);
   return <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
     <View style={styles.page}>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text accessibilityRole="header" style={styles.title}>Ajustes</Text>
-        <AccountSettings />
-        <AppearanceSettings />
+      <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <SectionEntrance section="/ajustes" order={0}><Text accessibilityRole="header" style={styles.title}>Ajustes</Text></SectionEntrance>
+        <SectionEntrance section="/ajustes" order={1}><AccountSettings /></SectionEntrance>
+        <View onLayout={(event) => setAppearanceY((current) => current === event.nativeEvent.layout.y ? current : event.nativeEvent.layout.y)}><SectionEntrance section="/ajustes" order={2}><AppearanceSettings /></SectionEntrance></View>
       </ScrollView>
-      <SectionTabs active="settings" />
     </View>
   </SafeAreaView>;
 }

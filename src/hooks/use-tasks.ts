@@ -39,7 +39,7 @@ export function useTasks() {
     const dueAt = nextRecurringDueAt(task, new Date(), root?.dueAt);
     if (!dueAt) return;
     if (tasks.some((item) => item.id !== task.id && item.recurrenceId === recurrenceId && !item.completed && item.dueAt === dueAt)) return;
-    const next = createTask({ listId: task.listId, title: task.title, description: task.description, dueAt, hasTime: task.hasTime, repeatEvery: task.repeatEvery, repeatUnit: task.repeatUnit, recurrenceId });
+    const next = createTask({ listId: task.listId, title: task.title, description: task.description, dueAt, hasTime: task.hasTime, repeatEvery: task.repeatEvery, repeatUnit: task.repeatUnit, recurrenceId, reminderMinutes: task.reminderMinutes });
     mutate({ entity: 'tasks', id: next.id, action: 'create', item: next });
   }
   function toggleStar(id: string) {
