@@ -1,13 +1,15 @@
+import { useAgendaCanPress } from '@/components/agenda-pager';
 import Pressable from '@/components/feedback-pressable';
 import { useSectionStyles } from '@/theme/appearance';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Easing, PanResponder, StyleSheet, Text, View } from 'react-native';
 import { formatDueDate, isOverdue, type Task } from '@/models/task';
 
-type Props = { task: Task; listName?: string; onToggle: () => void; onEdit: () => void; onStar: () => void; animateArrival?: boolean; keepInPlace?: boolean; last?: boolean };
+type Props = { task: Task; listName?: string; onToggle: () => void; onEdit: () => void; onStar: () => void; onDelete: (id: string) => void; animateArrival?: boolean; keepInPlace?: boolean; swipeDeleteEnabled?: boolean; last?: boolean };
 
-export default function TaskRow({ task, listName, onToggle, onEdit, onStar, animateArrival = false, keepInPlace = false, last }: Props) {
+export default function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateArrival = false, keepInPlace = false, swipeDeleteEnabled = true, last }: Props) {
+  const canPress = useAgendaCanPress();
   const { styles, color } = useSectionStyles(makeStyles, 'tasks');
   const [entering, setEntering] = useState(animateArrival);
   const [presence] = useState(() => new Animated.Value(animateArrival ? 0 : 1));
@@ -27,8 +29,42 @@ export default function TaskRow({ task, listName, onToggle, onEdit, onStar, anim
   const [transitioning, setTransitioning] = useState(false);
   const [lines, setLines] = useState<{ x: number; y: number; width: number; height: number }[]>([]);
 
+  const [translateX] = useState(() => new Animated.Value(0));
+  const rowWidth = useRef(320);
+  const deleting = useRef(false);
+  const dragging = useRef(false);
+  const panResponder = useMemo(() => {
+    const reset = () => {
+      dragging.current = false;
+      Animated.spring(translateX, { toValue: 0, speed: 30, bounciness: 0, useNativeDriver: false }).start();
+    };
+    // PanResponder stores these callbacks; ref values are read only during gestures.
+    // eslint-disable-next-line react-hooks/refs
+    return PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_, gesture) => swipeDeleteEnabled && !transitioning && !entering && !deleting.current && gesture.dx < -12 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5,
+      onPanResponderGrant: () => { dragging.current = true; translateX.stopAnimation(); },
+      onPanResponderMove: (_, gesture) => translateX.setValue(Math.min(0, gesture.dx)),
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dx > -Math.max(72, rowWidth.current * 0.25)) { reset(); return; }
+        if (deleting.current) return;
+        deleting.current = true;
+        dragging.current = false;
+        setTransitioning(true);
+        Animated.sequence([
+          Animated.timing(translateX, { toValue: -rowWidth.current, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: false }),
+          Animated.timing(presence, { toValue: 0, duration: 140, easing: Easing.inOut(Easing.cubic), useNativeDriver: false }),
+        ]).start(({ finished }) => {
+          if (finished) onDelete(task.id);
+          else { deleting.current = false; translateX.setValue(0); presence.setValue(1); setTransitioning(false); }
+        });
+      },
+      onPanResponderTerminate: reset,
+      onPanResponderTerminationRequest: () => !dragging.current,
+    });
+  }, [translateX, presence, onDelete, transitioning, entering, task.id, swipeDeleteEnabled]);
+
   function toggleWithAnimation() {
-    if (transitioning) return;
+    if (!canPress() || transitioning || dragging.current || deleting.current) return;
     setTransitioning(true);
     Animated.parallel([
       Animated.timing(progress, {
@@ -50,8 +86,9 @@ export default function TaskRow({ task, listName, onToggle, onEdit, onStar, anim
   }
 
   return (
-    <Animated.View pointerEvents={transitioning ? 'none' : 'auto'} style={{ overflow: 'hidden', opacity: presence, height: rowHeight && (transitioning || entering) ? presence.interpolate({ inputRange: [0, 1], outputRange: [0, rowHeight] }) : undefined }}>
-    <View onLayout={(event) => { if (!transitioning) setRowHeight(event.nativeEvent.layout.height); }} style={[styles.row, !last && styles.border, rowHeight && (transitioning || entering) ? { height: rowHeight, flexShrink: 0 } : undefined]}>
+    <Animated.View {...panResponder.panHandlers} pointerEvents={transitioning ? 'none' : 'auto'} style={{ overflow: 'hidden', opacity: presence, height: rowHeight && (transitioning || entering) ? presence.interpolate({ inputRange: [0, 1], outputRange: [0, rowHeight] }) : undefined }}>
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.deleteBackground, { opacity: translateX.interpolate({ inputRange: [-72, 0], outputRange: [1, 0], extrapolate: 'clamp' }) }]}><MaterialIcons name="delete-outline" size={24} color="#fff" /></Animated.View>
+    <Animated.View onLayout={(event) => { rowWidth.current = event.nativeEvent.layout.width; if (!transitioning) setRowHeight(event.nativeEvent.layout.height); }} style={[styles.row, { transform: [{ translateX }] }, !last && styles.border, rowHeight && (transitioning || entering) ? { height: rowHeight, flexShrink: 0 } : undefined]}>
       <Pressable onPress={toggleWithAnimation} disabled={transitioning} accessibilityRole="checkbox" accessibilityLabel={`${task.completed ? 'Marcar como pendiente' : 'Completar'}: ${task.title}`} accessibilityState={{ checked: task.completed, disabled: transitioning }} aria-checked={task.completed} style={styles.checkTarget}>
         <Animated.View style={[styles.checkbox, {
           transform: [{ scale: checkScale }],
@@ -60,7 +97,7 @@ export default function TaskRow({ task, listName, onToggle, onEdit, onStar, anim
         }]}><Animated.View style={{ opacity: progress }}><MaterialIcons name="check" size={16} color="#fff" /></Animated.View></Animated.View>
       </Pressable>
       <View style={styles.editArea}>
-      <Pressable onPress={onEdit} accessibilityRole="button" accessibilityLabel={`Editar tarea: ${task.title}`} style={StyleSheet.absoluteFill} />
+      <Pressable onPress={() => { if (canPress() && !dragging.current && !deleting.current) onEdit(); }} accessibilityRole="button" accessibilityLabel={`Editar tarea: ${task.title}`} style={StyleSheet.absoluteFill} />
       <View style={styles.content} pointerEvents="box-none">
         <View style={styles.textContent} pointerEvents="none">
         {listName && <Text accessibilityLabel={`Lista de ${task.title}: ${listName}`} numberOfLines={1} ellipsizeMode="tail" style={styles.listName}>{listName}</Text>}
@@ -87,21 +124,25 @@ export default function TaskRow({ task, listName, onToggle, onEdit, onStar, anim
 
         </View>
       <View style={styles.metadata} pointerEvents="box-none">
-      <Pressable accessibilityRole="button" accessibilityLabel={`Estrella: ${task.title}`} aria-pressed={task.starred} accessibilityState={{ selected: task.starred }} onPress={onStar} style={styles.starTarget}><MaterialIcons name={task.starred ? 'star' : 'star-border'} size={23} color={task.starred ? color('#1a73e8') : color('#80868b')} /></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Estrella: ${task.title}`} aria-pressed={task.starred} accessibilityState={{ selected: task.starred }} onPress={() => { if (canPress() && !dragging.current && !deleting.current) onStar(); }} style={styles.starTarget}><MaterialIcons name={task.starred ? 'star' : 'star-border'} size={23} color={task.starred ? color('#1a73e8') : color('#80868b')} /></Pressable>
       {task.dueAt && <View style={styles.date} pointerEvents="none">
-        <Text style={[styles.dateText, overdue && styles.overdue]}>{formatDueDate(task.dueAt, false)}</Text>
+        <View style={styles.dateLine}>
+          {task.repeatEvery !== null && <MaterialIcons testID={`task-recurrence-${task.id}`} name="repeat" size={12} color={color('#5f6368')} />}
+          <Text style={[styles.dateText, overdue && styles.overdue]}>{formatDueDate(task.dueAt, false)}</Text>
+        </View>
         {task.hasTime && <Text style={[styles.timeText, overdue && styles.overdue]}>{new Date(task.dueAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>}
       </View>}
       </View>
       </View>
       </View>
-    </View>
+    </Animated.View>
     </Animated.View>
   );
 }
 
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'stretch', minHeight: 60, overflow: 'hidden' },
+  deleteBackground: { backgroundColor: color('#b3261e'), alignItems: 'flex-end', justifyContent: 'center', paddingRight: 24 },
+  row: { backgroundColor: color('#fff'), flexDirection: 'row', alignItems: 'stretch', minHeight: 60, overflow: 'hidden' },
   border: { borderBottomWidth: 1, borderBottomColor: color('#f0f2f5') },
   checkTarget: { width: 48, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   editArea: { flex: 1, minWidth: 0 },
@@ -118,6 +159,7 @@ const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   completedTitle: { textDecorationLine: 'line-through', color: color('#8b919b'), fontWeight: '400' },
   completedDescription: { color: color('#9aa0a6') },
   date: { maxWidth: 58, flexShrink: 0, alignSelf: 'stretch', alignItems: 'flex-end', justifyContent: 'center', gap: 3 },
+  dateLine: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   dateText: { fontFamily: 'Manrope-Medium', fontSize: 11, lineHeight: 15, textAlign: 'right', color: color('#80868b'), fontWeight: 'normal' },
   timeText: { fontFamily: 'Manrope-SemiBold', fontSize: 12, lineHeight: 16, textAlign: 'right', color: color('#80868b'), fontWeight: 'normal' },
   overdue: { color: color('#b3261e') },

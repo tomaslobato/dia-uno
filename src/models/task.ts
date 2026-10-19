@@ -1,4 +1,5 @@
 import { normalizeTaskListId } from './task-list.ts';
+export type TaskRepeatUnit = 'days' | 'weeks' | 'months';
 export type Task = {
   id: string;
   title: string;
@@ -9,28 +10,64 @@ export type Task = {
   starred: boolean;
   createdAt: string;
   listId: string | null;
+  repeatEvery: number | null;
+  repeatUnit: TaskRepeatUnit | null;
+  recurrenceId: string | null;
 };
 
-export type TaskDraft = Pick<Task, 'title' | 'description' | 'dueAt' | 'hasTime'> & { listId?: string | null };
+export type TaskDraft = Pick<Task, 'title' | 'description' | 'dueAt' | 'hasTime'> & { listId?: string | null; repeatEvery?: number | null; repeatUnit?: TaskRepeatUnit | null; recurrenceId?: string | null };
 
 export function createTask(draft: TaskDraft, now = new Date()): Task {
+  const id = `${now.getTime()}-${Math.random().toString(36).slice(2, 10)}`;
+  const repeatEvery = draft.repeatEvery ?? null;
+  const repeatUnit = repeatEvery === null ? null : draft.repeatUnit ?? 'days';
   return {
     ...draft,
     listId: normalizeTaskListId(draft.listId),
     title: draft.title.trim(),
     description: draft.description.trim(),
-    id: `${now.getTime()}-${Math.random().toString(36).slice(2, 10)}`,
+    id,
     completed: false,
     starred: false,
     createdAt: now.toISOString(),
+    repeatEvery,
+    repeatUnit,
+    recurrenceId: repeatEvery === null ? null : draft.recurrenceId ?? id,
   };
+}
+
+export function nextRecurringDueAt(task: Task, now = new Date(), anchorDueAt?: string | null): string | null {
+  if (!task.dueAt || !task.repeatEvery || !task.repeatUnit) return null;
+  const due = new Date(task.dueAt);
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const anchorDay = new Date(anchorDueAt ?? task.dueAt).getDate();
+  const add = () => {
+    if (task.repeatUnit === 'days') dueDay.setDate(dueDay.getDate() + task.repeatEvery!);
+    else if (task.repeatUnit === 'weeks') dueDay.setDate(dueDay.getDate() + task.repeatEvery! * 7);
+    else if (task.repeatUnit === 'months') {
+      dueDay.setDate(1);
+      dueDay.setMonth(dueDay.getMonth() + task.repeatEvery!);
+      dueDay.setDate(Math.min(anchorDay, new Date(dueDay.getFullYear(), dueDay.getMonth() + 1, 0).getDate()));
+    }
+  };
+  do { add(); } while (dueDay <= today);
+  dueDay.setHours(due.getHours(), due.getMinutes(), due.getSeconds(), due.getMilliseconds());
+  return dueDay.toISOString();
 }
 
 export function parseTasks(value: string | null): Task[] {
   if (!value) return [];
   const parsed: unknown = JSON.parse(value);
   if (!Array.isArray(parsed) || !parsed.every(isTask)) throw new Error('Invalid task storage');
-  return parsed.map((task: Task) => ({ ...task, starred: task.starred ?? false, listId: normalizeTaskListId(task.listId) }));
+  return parsed.map((task: Task) => {
+    const legacyRecurrence = (task as Task & { recurrence?: string }).recurrence;
+    const repeatEvery = task.repeatEvery ?? (legacyRecurrence === 'daily' || legacyRecurrence === 'weekly' || legacyRecurrence === 'monthly' ? 1 : legacyRecurrence === 'yearly' ? 12 : null);
+    const repeatUnit = task.repeatUnit ?? (legacyRecurrence === 'weekly' ? 'weeks' : legacyRecurrence === 'monthly' || legacyRecurrence === 'yearly' ? 'months' : repeatEvery ? 'days' : null);
+    const { recurrence: _legacy, ...current } = task as Task & { recurrence?: string };
+    return { ...current, starred: task.starred ?? false, listId: normalizeTaskListId(task.listId), repeatEvery, repeatUnit,
+      recurrenceId: task.recurrenceId ?? (repeatEvery === null ? null : task.id) };
+  });
 }
 
 function isTask(value: unknown): value is Task {
@@ -42,6 +79,9 @@ function isTask(value: unknown): value is Task {
     (task.starred === undefined || typeof task.starred === 'boolean') &&
     (task.listId === undefined || task.listId === null || (typeof task.listId === 'string' && task.listId.length > 0)) &&
     typeof task.hasTime === 'boolean' && typeof task.createdAt === 'string' &&
+    (task.repeatEvery === undefined || task.repeatEvery === null || (typeof task.repeatEvery === 'number' && Number.isInteger(task.repeatEvery) && task.repeatEvery >= 1 && task.repeatEvery <= 10000)) &&
+    (task.repeatUnit === undefined || task.repeatUnit === null || ['days', 'weeks', 'months'].includes(task.repeatUnit)) &&
+    (task.recurrenceId === undefined || task.recurrenceId === null || typeof task.recurrenceId === 'string') &&
     (task.dueAt === null || (typeof task.dueAt === 'string' && Number.isFinite(Date.parse(task.dueAt))))
   );
 }

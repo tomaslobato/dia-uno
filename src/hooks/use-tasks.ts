@@ -1,6 +1,6 @@
 import { useData } from '@/data/data-provider';
 import { createTaskList, DEFAULT_LIST_ID } from '@/models/task-list';
-import { createTask, type TaskDraft } from '@/models/task';
+import { createTask, nextRecurringDueAt, type TaskDraft } from '@/models/task';
 
 export function useTasks() {
   const { tasks, lists: storedLists, ready, error, mutate } = useData();
@@ -20,12 +20,26 @@ export function useTasks() {
   function saveTask(draft: TaskDraft, id?: string) {
     if (!draft.title.trim() || !ready) return;
     const clean = { ...draft, title: draft.title.trim(), description: draft.description.trim() };
-    if (id) mutate({ entity: 'tasks', id, action: 'patch', patch: clean });
+    if (id) {
+      const current = tasks.find((task) => task.id === id);
+      const repeatEvery = clean.repeatEvery === undefined ? current?.repeatEvery ?? null : clean.repeatEvery;
+      mutate({ entity: 'tasks', id, action: 'patch', patch: { ...clean, repeatEvery, repeatUnit: repeatEvery ? clean.repeatUnit ?? current?.repeatUnit ?? 'days' : null, recurrenceId: repeatEvery ? current?.recurrenceId ?? current?.id ?? clean.recurrenceId ?? null : null } });
+    }
     else { const item = createTask(clean); mutate({ entity: 'tasks', id: item.id, action: 'create', item }); }
   }
   function toggleTask(id: string) {
     const task = tasks.find((item) => item.id === id);
-    if (ready && task) mutate({ entity: 'tasks', id, action: 'patch', patch: { completed: !task.completed } });
+    if (!ready || !task) return;
+    const completing = !task.completed;
+    mutate({ entity: 'tasks', id, action: 'patch', patch: { completed: completing } });
+    if (!completing || !task.repeatEvery || !task.repeatUnit) return;
+    const recurrenceId = task.recurrenceId ?? task.id;
+    const root = tasks.find((item) => item.id === recurrenceId);
+    const dueAt = nextRecurringDueAt(task, new Date(), root?.dueAt);
+    if (!dueAt) return;
+    if (tasks.some((item) => item.id !== task.id && item.recurrenceId === recurrenceId && !item.completed && item.dueAt === dueAt)) return;
+    const next = createTask({ listId: task.listId, title: task.title, description: task.description, dueAt, hasTime: task.hasTime, repeatEvery: task.repeatEvery, repeatUnit: task.repeatUnit, recurrenceId });
+    mutate({ entity: 'tasks', id: next.id, action: 'create', item: next });
   }
   function toggleStar(id: string) {
     const task = tasks.find((item) => item.id === id);

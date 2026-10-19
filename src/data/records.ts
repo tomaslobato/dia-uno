@@ -45,6 +45,9 @@ export function taskFields(task: Partial<Task>): Record<string, unknown> {
   if ('description' in task) fields.descripcion = task.description;
   if ('completed' in task) fields.realizada = task.completed;
   if ('starred' in task) fields.favorita = task.starred;
+  if ('repeatEvery' in task) fields.repetir_cada = task.repeatEvery;
+  if ('repeatUnit' in task) fields.repetir_unidad = task.repeatUnit;
+  if ('recurrenceId' in task) fields.recurrencia_id = task.recurrenceId;
   if ('createdAt' in task) fields.creada_en = task.createdAt;
   if ('dueAt' in task) {
     const date = task.dueAt ? new Date(task.dueAt) : null;
@@ -83,7 +86,8 @@ export function decodeRecords(value: unknown, owner: string): Records {
     const due = row.fecha === null ? null : new Date(`${row.fecha}T${row.hora ?? '00:00:00'}`);
     if (due && (!Number.isFinite(due.getTime()) || dayKey(due) !== row.fecha)) throw new Error('Fecha inválida');
     return { id: row.id, listId: normalizeTaskListId(row.lista_id), title: row.nombre, description: row.descripcion, dueAt: due?.toISOString() ?? null,
-      hasTime: row.hora !== null, starred: row.favorita, completed: row.realizada, createdAt: row.creada_en };
+      hasTime: row.hora !== null, starred: row.favorita, completed: row.realizada, createdAt: row.creada_en,
+      repeatEvery: row.repetir_cada ?? null, repeatUnit: row.repetir_unidad ?? null, recurrenceId: row.recurrencia_id ?? null };
   });
   const habitRows: Habit[] = rows.habitos.map((row) => {
     if (!row || row.usuario_id !== owner) throw new Error('Propietario de datos inválido');

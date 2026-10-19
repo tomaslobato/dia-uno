@@ -1,66 +1,44 @@
 import Pressable from '@/components/feedback-pressable';
 import { useSectionStyles } from '@/theme/appearance';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AgendaDayButton } from '@/components/agenda-pager';
+import AgendaDayCarousel from '@/components/agenda-day-carousel';
 import TaskListOptions from '@/components/task-list-options';
 import TaskListCreate from '@/components/task-list-create';
 import TaskEditor from '@/components/task-editor';
 import TaskRow from '@/components/task-row';
 import SectionTabs from '@/components/section-tabs';
 import { useTaskGreeting } from '@/hooks/use-task-greeting';
-import { useAuth } from '@/auth/auth-provider';
+import { useTaskDeletion } from '@/hooks/use-task-deletion';
+import { router, useLocalSearchParams } from 'expo-router';
+import { agendaDayLabel, shiftAgendaDay, agendaTasksForDay, validAgendaDay } from '@/models/agenda';
+import { dayKey, localDay } from '@/models/habit';
 import { useTasks } from '@/hooks/use-tasks';
 import { compareTaskDueDate, matchesTaskDate, staysInTaskSchedule, taskDateSection, type Task } from '@/models/task';
 
 export default function TasksScreen() {
-  const { styles, color } = useSectionStyles(makeStyles, 'tasks');
+  const { day, agendaView, agendaDate } = useLocalSearchParams<{ day?: string; agendaView?: string; agendaDate?: string }>();
+  const agendaDay = validAgendaDay(day) ? day : null;
+  const { styles, color, preferences } = useSectionStyles(makeStyles, 'tasks');
   const { tasks, lists, addList, renameList, deleteList, ready, error, saveTask, toggleTask, toggleStar, deleteTask } = useTasks();
-  const { session } = useAuth();
-  const owner = session?.user.id ?? 'guest';
-  const [removed, setRemoved] = useState<{ id: string; owner: string } | null>(null);
-  const removedId = removed?.owner === owner ? removed.id : null;
-  const deletion = useRef<{ timer: ReturnType<typeof setTimeout>; commit: () => void } | null>(null);
-  useEffect(() => {
-    return () => {
-      const pending = deletion.current;
-      deletion.current = null;
-      if (pending) { clearTimeout(pending.timer); pending.commit(); }
-    };
-  }, [owner]);
-  function removeTask(id: string) {
-    const previous = deletion.current;
-    if (previous) { clearTimeout(previous.timer); previous.commit(); }
-    setRemoved({ id, owner });
-    const commit = () => deleteTask(id);
-    const timer = setTimeout(() => {
-      deletion.current = null;
-      commit();
-      setRemoved(null);
-    }, 8000);
-    deletion.current = { timer, commit };
-  }
-  function undoDelete() {
-    if (!deletion.current) return;
-    clearTimeout(deletion.current.timer);
-    deletion.current = null;
-    setRemoved(null);
-  }
+  const { removedId, removeTask, undoDelete } = useTaskDeletion(deleteTask);
   const visibleTasks = tasks.filter((task) => task.id !== removedId);
   const [listId, setListId] = useState('all');
   const [managingList, setManagingList] = useState<string | null>(null);
   const managedList = lists.find((list) => list.id === managingList);
   const [creatingList, setCreatingList] = useState(false);
   const selectedList = lists.find((list) => list.id === listId);
-  const listTasks = !selectedList ? visibleTasks : visibleTasks.filter((task) => task.listId === selectedList.id);
+  const listTasks = agendaDay ? agendaTasksForDay(visibleTasks, agendaDay, true) : !selectedList ? visibleTasks : visibleTasks.filter((task) => task.listId === selectedList.id);
   const greeting = useTaskGreeting();
   const insets = useSafeAreaInsets();
   const [editor, setEditor] = useState<{ task?: Task } | null>(null);
   const [arrival, setArrival] = useState<{ id: string; completed: boolean } | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
-  const starredOnly = listId === 'starred';
+  const starredOnly = !agendaDay && listId === 'starred';
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const refresh = () => setNow(new Date());
@@ -73,7 +51,7 @@ export default function TasksScreen() {
     };
     scheduleMidnight();
     const subscription = AppState.addEventListener('change', refresh);
-    return () => { clearInterval(timer); clearTimeout(dayTimer); subscription.remove(); };
+      return () => { clearInterval(timer); clearTimeout(dayTimer); subscription.remove(); };
   }, []);
   useEffect(() => {
     if (!arrival) return;
@@ -99,18 +77,18 @@ export default function TasksScreen() {
   }
   const today = now.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  return (
-    <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <View style={styles.page}>
-        <SectionTabs active="tasks" />
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, { paddingBottom: 116 + insets.bottom }]}>
-          <View style={styles.heading}>
+  const listContent = (
+        <ScrollView key={agendaDay ?? 'tasks'} showsVerticalScrollIndicator={false} contentContainerStyle={[agendaDay ? styles.dayScroll : styles.scroll, { paddingBottom: 116 + insets.bottom }]}>
+          {agendaDay ? <AgendaDayButton accessibilityRole="button" accessibilityLabel="Volver al calendario" accessibilityHint="Toca el título o la fecha para abrir Agenda" onPress={() => router.navigate({ pathname: '/agenda', params: { view: agendaView, date: agendaDate } })} style={styles.dayHeading}>
+            <View style={[styles.dayNumber, agendaDay === dayKey(now) && { backgroundColor: preferences.agenda }]}><Text style={[styles.dayNumberText, agendaDay === dayKey(now) && { color: '#fff' }]}>{localDay(agendaDay).getDate()}</Text></View>
+            <Text accessibilityRole="header" style={styles.dayTitle}>{agendaDayLabel(agendaDay, now)}</Text>
+          </AgendaDayButton> : <View style={styles.heading}>
             <Text style={styles.date}>{today.charAt(0).toUpperCase() + today.slice(1)}</Text>
             <Text style={styles.title}>{greeting.title}</Text>
             <Text style={styles.subtitle}>{greeting.subtitle}</Text>
-          </View>
+          </View>}
           {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-          <View style={styles.listHeader}><View style={styles.listSelection}>
+          {!agendaDay && <View style={styles.listHeader}><View style={styles.listSelection}>
             <ScrollView horizontal nestedScrollEnabled directionalLockEnabled showsHorizontalScrollIndicator keyboardShouldPersistTaps="handled" style={styles.listScroll} contentContainerStyle={styles.listChoices}>
               <Pressable accessibilityRole="button" accessibilityLabel="Tareas con estrella" aria-pressed={starredOnly} onPress={() => setListId('starred')} style={[styles.listChoice, styles.starChoice, starredOnly && styles.filterSelected]}><MaterialIcons name="star" size={20} color={color(starredOnly ? '#1a73e8' : '#80868b')} /></Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Lista: Todo" aria-pressed={listId === 'all'} onPress={() => setListId('all')} style={[styles.listChoice, listId === 'all' && styles.filterSelected]}><Text style={[styles.listTitle, listId === 'all' && styles.filterSelectedText]}>Todo</Text></Pressable>
@@ -118,11 +96,11 @@ export default function TasksScreen() {
               <Pressable disabled={!ready} accessibilityRole="button" accessibilityLabel="Nueva lista" onPress={() => setCreatingList(true)} style={styles.listAdd}><MaterialIcons name="add" size={23} color={color('#1a73e8')} /></Pressable>
 
             </ScrollView>
-          </View></View>
+          </View></View>}
           {!ready && !error && <ActivityIndicator color={color('#1a73e8')} style={styles.loading} />}
           {ready && sections.map((section) => <View key={section.title} style={styles.dateSection}>
-            <Text accessibilityRole="header" style={styles.sectionTitle}>{section.title}</Text>
-            <View style={styles.card}>{section.tasks.map((task, index) => <TaskRow key={task.id} task={task} keepInPlace={matchesTaskDate(task, 'today', now)} listName={!selectedList ? lists.find((list) => list.id === task.listId)?.name : undefined} animateArrival={arrival?.id === task.id && arrival.completed === task.completed} onToggle={() => moveTask(task.id)} onEdit={() => setEditor({ task })} onStar={() => toggleStar(task.id)} last={index === section.tasks.length - 1} />)}</View>
+            {!agendaDay && <Text accessibilityRole="header" style={styles.sectionTitle}>{section.title}</Text>}
+            <View style={styles.card}>{section.tasks.map((task, index) => <TaskRow key={task.id} task={task} swipeDeleteEnabled={!agendaDay} keepInPlace={matchesTaskDate(task, 'today', now)} listName={agendaDay || !selectedList ? lists.find((list) => list.id === task.listId)?.name : undefined} animateArrival={arrival?.id === task.id && arrival.completed === task.completed} onToggle={() => moveTask(task.id)} onEdit={() => setEditor({ task })} onStar={() => toggleStar(task.id)} onDelete={removeTask} last={index === section.tasks.length - 1} />)}</View>
           </View>)}
           {ready && pending.length === 0 && <View style={styles.empty}>
             <View style={styles.emptyIllustration}>
@@ -133,17 +111,25 @@ export default function TasksScreen() {
               </View>
               <View style={styles.sparkle}><MaterialIcons name="auto-awesome" size={22} color={color('#e2b44b')} /></View>
             </View>
-            <Text style={styles.emptyTitle}>{starredOnly ? 'Sin tareas con estrella.' : completed.length ? 'Todo al día.' : 'Tu día, más liviano.'}</Text>
-            <Text style={styles.emptySubtitle}>{starredOnly ? 'Marca tus tareas con una estrella para verlas aquí.' : completed.length ? 'Completaste todas tus tareas. Buen trabajo.' : 'Anotá eso que tenés en mente.\nEl primer paso es una nueva tarea.'}</Text>
+            <Text style={styles.emptyTitle}>{agendaDay ? (completed.length ? 'Todo al día.' : 'No hay tareas para este día.') : starredOnly ? 'Sin tareas con estrella.' : completed.length ? 'Todo al día.' : 'Tu día, más liviano.'}</Text>
+            <Text style={styles.emptySubtitle}>{agendaDay ? (completed.length ? 'Completaste las tareas de este día.' : 'Puedes añadir una tarea para esta fecha.') : starredOnly ? 'Marca tus tareas con una estrella para verlas aquí.' : completed.length ? 'Completaste todas tus tareas. Buen trabajo.' : 'Anotá eso que tenés en mente.\nEl primer paso es una nueva tarea.'}</Text>
           </View>}
           {completed.length > 0 && <View style={styles.completedSection}>
             <Pressable onPress={() => setShowCompleted(!showCompleted)} accessibilityRole="button" accessibilityState={{ expanded: showCompleted }} style={styles.completedHeader}>
               <MaterialIcons name={showCompleted ? 'keyboard-arrow-down' : 'keyboard-arrow-right'} size={21} color={color('#80868b')} />
               <Text style={styles.completedLabel}>Completadas</Text><Text style={styles.completedCount}>{completed.length}</Text>
             </Pressable>
-            {showCompleted && <View style={styles.card}>{completed.map((task, index) => <TaskRow key={task.id} task={task} keepInPlace={matchesTaskDate(task, 'today', now)} listName={!selectedList ? lists.find((list) => list.id === task.listId)?.name : undefined} animateArrival={arrival?.id === task.id && arrival.completed === task.completed} onToggle={() => moveTask(task.id)} onEdit={() => setEditor({ task })} onStar={() => toggleStar(task.id)} last={index === completed.length - 1} />)}</View>}
+            {showCompleted && <View style={styles.card}>{completed.map((task, index) => <TaskRow key={task.id} task={task} swipeDeleteEnabled={!agendaDay} keepInPlace={matchesTaskDate(task, 'today', now)} listName={agendaDay || !selectedList ? lists.find((list) => list.id === task.listId)?.name : undefined} animateArrival={arrival?.id === task.id && arrival.completed === task.completed} onToggle={() => moveTask(task.id)} onEdit={() => setEditor({ task })} onStar={() => toggleStar(task.id)} onDelete={removeTask} last={index === completed.length - 1} />)}</View>}
           </View>}
         </ScrollView>
+  );
+
+  return (
+    <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+      <View style={styles.page}>
+        <SectionTabs active={agendaDay ? "agenda" : "tasks"} />
+        {agendaDay ? <AgendaDayCarousel day={agendaDay} lists={lists} tasks={visibleTasks} now={now} onStep={(direction) => { setArrival(null); setShowCompleted(false); router.setParams({ day: shiftAgendaDay(agendaDay, direction) }); }}>{listContent}</AgendaDayCarousel> : listContent}
+
         {removedId && <View accessibilityLiveRegion="polite" style={[styles.undoBar, { bottom: 94 + Math.max(insets.bottom, 20) }]}>
           <Text style={styles.undoMessage}>Tarea eliminada</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Deshacer eliminación" onPress={undoDelete} style={styles.undoButton}><Text style={styles.undoText}>Deshacer</Text></Pressable>
@@ -156,7 +142,7 @@ export default function TasksScreen() {
       </View>
       {managedList && <TaskListOptions key={managedList.id} list={managedList} onClose={() => setManagingList(null)} onRename={(name) => { renameList(managedList.id, name); setManagingList(null); }} onDelete={() => { deleteList(managedList.id); if (listId === managedList.id) setListId('all'); setManagingList(null); }} />}
       {creatingList && <TaskListCreate onClose={() => setCreatingList(false)} onCreate={(name) => { const id = addList(name); if (id) { setListId(id); setCreatingList(false); } }} />}
-      {editor && <TaskEditor lists={lists} initialListId={selectedList?.id ?? null} task={editor.task ? tasks.find((task) => task.id === editor.task?.id) ?? editor.task : undefined} onToggle={moveTask} onStar={toggleStar} onSave={saveTask} onDelete={removeTask} onClose={() => setEditor(null)} />}
+      {editor && <TaskEditor lists={lists} initialDate={agendaDay ? localDay(agendaDay) : undefined} initialListId={agendaDay ? null : selectedList?.id ?? null} task={editor.task ? tasks.find((task) => task.id === editor.task?.id) ?? editor.task : undefined} onToggle={moveTask} onStar={toggleStar} onSave={saveTask} onDelete={removeTask} onClose={() => setEditor(null)} />}
     </SafeAreaView>
   );
 }
@@ -165,6 +151,8 @@ const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: color('#f8fafd') },
   page: { flex: 1, width: '100%', maxWidth: 660, alignSelf: 'center' },
   scroll: { paddingHorizontal: 24 },
+  dayScroll: { paddingHorizontal: 0 }, dayNumber: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }, dayNumberText: { fontFamily: 'Manrope-SemiBold', fontSize: 19, lineHeight: 25, color: color('#202124') },
+  dayHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 4, paddingBottom: 22 }, dayTitle: { fontFamily: 'Manrope-SemiBold', fontSize: 26, lineHeight: 34, color: color('#202124') },
   heading: { paddingTop: 16, paddingBottom: 22 },
   date: { color: color('#80868b'), fontFamily: 'Manrope-Regular', fontSize: 12, marginBottom: 8 },
   title: { fontFamily: 'Manrope-SemiBold', fontSize: 30, lineHeight: 38, color: color('#202124'), fontWeight: 'normal', letterSpacing: -1.2 },

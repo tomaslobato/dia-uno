@@ -2,8 +2,8 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-type Preferences = { dark: boolean; tasks: string; habits: string };
-const defaults: Preferences = { dark: false, tasks: '#1a73e8', habits: '#d65c66' };
+type Preferences = { dark: boolean; tasks: string; habits: string; agenda: string };
+const defaults: Preferences = { dark: false, tasks: '#1a73e8', habits: '#d65c66', agenda: '#8755c5' };
 const Context = createContext<{ preferences: Preferences; update: (change: Partial<Preferences>) => void; ready: boolean; error: string | null } | null>(null);
 export const colorChoices = [
   { name: 'Rojo claro', value: '#d65c66' }, { name: 'Azul', value: '#1a73e8' },
@@ -28,8 +28,8 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       if (!active) return;
       if (raw) {
         const stored = JSON.parse(raw);
-        if (typeof stored.dark !== 'boolean' || !/^#[a-f\d]{6}$/i.test(stored.tasks) || !/^#[a-f\d]{6}$/i.test(stored.habits)) throw new Error('Invalid preferences');
-        setPreferences(stored);
+        if (typeof stored.dark !== 'boolean' || !/^#[a-f\d]{6}$/i.test(stored.tasks) || !/^#[a-f\d]{6}$/i.test(stored.habits) || (stored.agenda !== undefined && !/^#[a-f\d]{6}$/i.test(stored.agenda))) throw new Error('Invalid preferences');
+        setPreferences({ ...defaults, ...stored });
       }
       setReady(true);
     }).catch(() => { if (active) setError('No pudimos cargar la apariencia. Volvé a abrir la app.'); });
@@ -54,7 +54,7 @@ export function useAppearance() {
   };
   return { ...context, ...palette };
 }
-export function useSectionStyles<T>(factory: (color: (value: string) => string) => T, section: 'tasks' | 'habits') {
+export function useSectionStyles<T>(factory: (color: (value: string) => string) => T, section: 'tasks' | 'habits' | 'agenda') {
   const appearance = useAppearance();
   const { preferences, background, surface, text, muted, border } = appearance;
   const accent = preferences[section];
