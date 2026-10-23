@@ -1,6 +1,7 @@
 import { useData } from '@/data/data-provider';
 import { createTaskList, DEFAULT_LIST_ID } from '@/models/task-list';
-import { createTask, nextRecurringDueAt, type TaskDraft } from '@/models/task';
+import { dayKey } from '@/models/habit';
+import { alignDueToWeekdays, createTask, materializeSiblingDueAts, nextRecurringDueAt, type TaskDraft } from '@/models/task';
 import { useMemo } from 'react';
 
 export function useTasks() {
@@ -20,13 +21,47 @@ export function useTasks() {
   }
   function saveTask(draft: TaskDraft, id?: string) {
     if (!draft.title.trim() || !ready) return;
-    const clean = { ...draft, title: draft.title.trim(), description: draft.description.trim() };
+    let clean: TaskDraft = { ...draft, title: draft.title.trim(), description: draft.description.trim() };
+    if (clean.dueAt && clean.repeatEvery && clean.repeatUnit === 'weeks' && clean.repeatWeekdays?.length) {
+      const aligned = alignDueToWeekdays(new Date(clean.dueAt), clean.repeatWeekdays);
+      clean = { ...clean, dueAt: aligned.toISOString() };
+    }
     if (id) {
       const current = tasks.find((task) => task.id === id);
       const repeatEvery = clean.repeatEvery === undefined ? current?.repeatEvery ?? null : clean.repeatEvery;
-      mutate({ entity: 'tasks', id, action: 'patch', patch: { ...clean, repeatEvery, repeatUnit: repeatEvery ? clean.repeatUnit ?? current?.repeatUnit ?? 'days' : null, recurrenceId: repeatEvery ? current?.recurrenceId ?? current?.id ?? clean.recurrenceId ?? null : null } });
+      const repeatUnit = repeatEvery ? clean.repeatUnit ?? current?.repeatUnit ?? 'days' : null;
+      mutate({
+        entity: 'tasks',
+        id,
+        action: 'patch',
+        patch: {
+          ...clean,
+          repeatEvery,
+          repeatUnit,
+          repeatWeekdays: repeatUnit === 'weeks' ? clean.repeatWeekdays ?? current?.repeatWeekdays ?? [] : [],
+          recurrenceId: repeatEvery ? current?.recurrenceId ?? current?.id ?? clean.recurrenceId ?? null : null,
+        },
+      });
+      return;
     }
-    else { const item = createTask(clean); mutate({ entity: 'tasks', id: item.id, action: 'create', item }); }
+    const item = createTask(clean);
+    const siblings = materializeSiblingDueAts(item).map((dueAt, index) => createTask({
+      listId: item.listId,
+      title: item.title,
+      description: item.description,
+      dueAt,
+      hasTime: item.hasTime,
+      starred: item.starred,
+      repeatEvery: item.repeatEvery,
+      repeatUnit: item.repeatUnit,
+      repeatWeekdays: item.repeatWeekdays,
+      recurrenceId: item.recurrenceId,
+      reminderMinutes: item.reminderMinutes,
+    }, new Date(), `${item.recurrenceId}:day:${dayKey(new Date(dueAt))}:${index}`));
+    // Enqueue root + siblings together so a mid-flight sync cannot drop later creates.
+    for (const occurrence of [item, ...siblings]) {
+      mutate({ entity: 'tasks', id: occurrence.id, action: 'create', item: occurrence });
+    }
   }
   function toggleTask(id: string) {
     const task = tasks.find((item) => item.id === id);
@@ -39,7 +74,19 @@ export function useTasks() {
     const dueAt = nextRecurringDueAt(task, new Date(), root?.dueAt);
     if (!dueAt) return;
     if (tasks.some((item) => item.id !== task.id && item.recurrenceId === recurrenceId && !item.completed && item.dueAt === dueAt)) return;
-    const next = createTask({ listId: task.listId, title: task.title, description: task.description, dueAt, hasTime: task.hasTime, repeatEvery: task.repeatEvery, repeatUnit: task.repeatUnit, recurrenceId, reminderMinutes: task.reminderMinutes });
+    const next = createTask({
+      listId: task.listId,
+      title: task.title,
+      description: task.description,
+      dueAt,
+      hasTime: task.hasTime,
+      starred: task.starred,
+      repeatEvery: task.repeatEvery,
+      repeatUnit: task.repeatUnit,
+      repeatWeekdays: task.repeatWeekdays,
+      recurrenceId,
+      reminderMinutes: task.reminderMinutes,
+    });
     mutate({ entity: 'tasks', id: next.id, action: 'create', item: next });
   }
   function toggleStar(id: string) {

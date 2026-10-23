@@ -45,9 +45,20 @@ export function taskFields(task: Partial<Task>): Record<string, unknown> {
   if ('description' in task) fields.descripcion = task.description;
   if ('completed' in task) fields.realizada = task.completed;
   if ('starred' in task) fields.favorita = task.starred;
-  if ('repeatEvery' in task) fields.repetir_cada = task.repeatEvery;
-  if ('repeatUnit' in task) fields.repetir_unidad = task.repeatUnit;
+  if ('repeatEvery' in task || 'repeatUnit' in task) {
+    // Remote schema only allows days/weeks/months; years are sent as months.
+    const unit = task.repeatUnit ?? null;
+    const every = task.repeatEvery ?? null;
+    if (unit === 'years' && every) {
+      fields.repetir_cada = every * 12;
+      fields.repetir_unidad = 'months';
+    } else {
+      if ('repeatEvery' in task) fields.repetir_cada = every;
+      if ('repeatUnit' in task) fields.repetir_unidad = unit;
+    }
+  }
   if ('recurrenceId' in task) fields.recurrencia_id = task.recurrenceId;
+  if ('repeatWeekdays' in task) fields.repetir_dias = task.repeatWeekdays ?? [];
   if ('reminderMinutes' in task) fields.recordatorio_minutos = task.reminderMinutes;
   if ('createdAt' in task) fields.creada_en = task.createdAt;
   if ('dueAt' in task) {
@@ -89,6 +100,7 @@ export function decodeRecords(value: unknown, owner: string): Records {
     return { id: row.id, listId: normalizeTaskListId(row.lista_id), title: row.nombre, description: row.descripcion, dueAt: due?.toISOString() ?? null,
       hasTime: row.hora !== null, starred: row.favorita, completed: row.realizada, createdAt: row.creada_en,
       repeatEvery: row.repetir_cada ?? null, repeatUnit: row.repetir_unidad ?? null, recurrenceId: row.recurrencia_id ?? null,
+      repeatWeekdays: Array.isArray(row.repetir_dias) ? row.repetir_dias : undefined,
       reminderMinutes: row.recordatorio_minutos === undefined ? 30 : row.recordatorio_minutos };
   });
   const habitRows: Habit[] = rows.habitos.map((row) => {

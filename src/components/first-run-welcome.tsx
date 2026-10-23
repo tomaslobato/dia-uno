@@ -95,7 +95,7 @@ export default function FirstRunWelcome({ owner }: { owner: string }) {
             <AgendaPreview tasks={preferences.tasks} habits={preferences.habits} agenda={preferences.agenda} surface={preferences.dark ? '#292e36' : surface} border={modalBorder} textColor={modalText} muted={modalMuted} />
             <View style={styles.captionRow}>
               <View style={[styles.caption, { borderColor: modalBorder }]}><MaterialIcons name="calendar-view-month" size={18} color={preferences.agenda} /><Text style={[styles.captionText, { color: modalText }]}>Calendario</Text></View>
-              <View style={[styles.caption, { borderColor: modalBorder }]}><MaterialIcons name="view-week" size={18} color={preferences.agenda} /><Text style={[styles.captionText, { color: modalText }]}>Vista de 3 días</Text></View>
+              <View style={[styles.caption, { borderColor: modalBorder }]}><MaterialIcons name="view-week" size={18} color={preferences.agenda} /><Text style={[styles.captionText, { color: modalText }]}>Vista semanal</Text></View>
             </View>
           </ScrollView>
           {error && <Text style={[styles.error, { color: preferences.habits }]}>No pudimos guardar tus preferencias iniciales. Intenta de nuevo.</Text>}

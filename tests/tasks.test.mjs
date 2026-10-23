@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { staysInTaskSchedule, taskDateSection, formatDueDate, matchesTaskDate, compareTaskDueDate, createTask, getTaskReminderAt, isOverdue, parseTasks } from '../src/models/task.ts';
+import { staysInTaskSchedule, taskDateSection, formatDueDate, formatTaskRepeat, formatTaskDueInSection, matchesTaskDate, compareTaskDueDate, createTask, getTaskReminderAt, isOverdue, materializeSiblingDueAts, nextRecurringDueAt, parseTasks } from '../src/models/task.ts';
+import { dayKey } from '../src/models/habit.ts';
 
 const draft = { title: '  Comprar pan  ', description: ' Integral ', dueAt: null, hasTime: false };
 
@@ -102,6 +103,68 @@ test('stars persist and old tasks without stars load without losing their inform
   assert.throws(() => parseTasks(JSON.stringify([{ ...task, starred: 'yes' }])));
 });
 
+test('recurrence labels cover days, weeks with weekday, months and years', () => {
+  const tuesday = new Date(2026, 9, 13, 12).toISOString(); // martes
+  assert.equal(formatTaskRepeat({ repeatEvery: null, repeatUnit: null, dueAt: tuesday, repeatWeekdays: [] }), null);
+  assert.equal(formatTaskRepeat({ repeatEvery: 1, repeatUnit: 'days', dueAt: tuesday, repeatWeekdays: [] }), 'Todos los días');
+  assert.equal(formatTaskRepeat({ repeatEvery: 3, repeatUnit: 'days', dueAt: tuesday, repeatWeekdays: [] }), 'Cada 3 días');
+  assert.equal(formatTaskRepeat({ repeatEvery: 1, repeatUnit: 'weeks', dueAt: tuesday, repeatWeekdays: [2] }), 'Todos los martes');
+  assert.equal(formatTaskRepeat({ repeatEvery: 2, repeatUnit: 'weeks', dueAt: tuesday, repeatWeekdays: [2] }), 'Cada 2 semanas los martes');
+  assert.match(formatTaskRepeat({ repeatEvery: 1, repeatUnit: 'weeks', dueAt: tuesday, repeatWeekdays: [1, 3, 5] }), /lunes.*miércoles.*viernes/);
+  assert.equal(formatTaskRepeat({ repeatEvery: 1, repeatUnit: 'months', dueAt: tuesday, repeatWeekdays: [] }), 'Todos los meses');
+  assert.equal(formatTaskRepeat({ repeatEvery: 2, repeatUnit: 'years', dueAt: tuesday, repeatWeekdays: [] }), 'Cada 2 años');
+});
+
+test('weekly multi-day series creates same-week siblings and advances across selected weekdays', () => {
+  const monday = new Date(2026, 9, 12, 9, 30); // lun 12 oct 2026
+  const task = createTask({
+    title: 'Gym',
+    description: '',
+    dueAt: monday.toISOString(),
+    hasTime: true,
+    repeatEvery: 1,
+    repeatUnit: 'weeks',
+    repeatWeekdays: [1, 3, 5],
+  });
+  assert.deepEqual(task.repeatWeekdays, [1, 3, 5]);
+  const siblings = materializeSiblingDueAts(task);
+  assert.deepEqual(siblings.map((due) => new Date(due).getDay()), [3, 5]);
+  assert.deepEqual(siblings.map((due) => dayKey(new Date(due))), ['2026-10-14', '2026-10-16']);
+  const afterMonday = nextRecurringDueAt(task, new Date(2026, 9, 12, 10));
+  assert.equal(new Date(afterMonday).getDay(), 3);
+  assert.equal(new Date(afterMonday).getHours(), 9);
+  const friday = { ...task, dueAt: new Date(2026, 9, 16, 9, 30).toISOString() };
+  const nextWeekMonday = nextRecurringDueAt(friday, new Date(2026, 9, 16, 10));
+  assert.equal(new Date(nextWeekMonday).toDateString(), new Date(2026, 9, 19, 9, 30).toDateString());
+});
+
+test('daily series fills the rest of the calendar week when created', () => {
+  const monday = createTask({
+    title: 'Agua',
+    description: '',
+    dueAt: new Date(2026, 9, 12, 8).toISOString(),
+    hasTime: true,
+    repeatEvery: 1,
+    repeatUnit: 'days',
+  });
+  assert.deepEqual(
+    materializeSiblingDueAts(monday).map((due) => dayKey(new Date(due))),
+    ['2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18'],
+  );
+  const friday = createTask({
+    title: 'Agua',
+    description: '',
+    dueAt: new Date(2026, 9, 16, 8).toISOString(),
+    hasTime: true,
+    repeatEvery: 1,
+    repeatUnit: 'days',
+  });
+  assert.deepEqual(
+    materializeSiblingDueAts(friday).map((due) => dayKey(new Date(due))),
+    ['2026-10-17', '2026-10-18'],
+  );
+});
+
 test('past due dates use calendar-day labels across hours and year boundaries', () => {
   const today = new Date(2026, 0, 2, 0, 5);
   assert.equal(formatDueDate(new Date(2026, 0, 1, 23, 59).toISOString(), false, today), 'Ayer');
@@ -119,17 +182,27 @@ test('tasks can be unassigned and legacy main-list assignments become unassigned
   assert.equal(parseTasks(JSON.stringify([{ ...createTask(draft), listId: 'mis-tareas' }]))[0].listId, null);
 });
 
-test('date sections are exclusive and use calendar days and Monday week boundaries', () => {
+test('date sections start at today and put overdue tasks under Hoy', () => {
   const now = new Date(2026, 9, 9, 23, 30);
   const section = (year, month, day) => taskDateSection({ ...createTask(draft), dueAt: new Date(year, month, day, 12).toISOString() }, now);
-  assert.equal(section(2026, 9, 8), 'Vencidas');
+  assert.equal(section(2026, 9, 8), 'Hoy');
   assert.equal(section(2026, 9, 9), 'Hoy');
   assert.equal(section(2026, 9, 10), 'Mañana');
-  assert.equal(section(2026, 9, 11), 'Esta semana');
-  assert.equal(section(2026, 9, 12), 'Futuro');
+  assert.match(section(2026, 9, 11), /11/);
   assert.equal(taskDateSection(createTask(draft), now), 'Sin fecha');
   assert.equal(taskDateSection({ ...createTask(draft), dueAt: new Date(2027, 0, 1).toISOString() }, new Date(2026, 11, 31)), 'Mañana');
-  assert.equal(taskDateSection({ ...createTask(draft), dueAt: new Date(2026, 9, 12).toISOString() }, new Date(2026, 9, 11)), 'Mañana');
+});
+
+test('section due meta shows only time for today and red overdue day labels', () => {
+  const now = new Date(2026, 9, 9, 15, 0);
+  const todayTimed = { ...createTask(draft), dueAt: new Date(2026, 9, 9, 18, 30).toISOString(), hasTime: true };
+  const overdueTimed = { ...createTask(draft), dueAt: new Date(2026, 9, 9, 10, 15).toISOString(), hasTime: true };
+  const yesterday = { ...createTask(draft), dueAt: new Date(2026, 9, 8, 9, 0).toISOString(), hasTime: true };
+  const yesterdayAllDay = { ...createTask(draft), dueAt: new Date(2026, 9, 8).toISOString(), hasTime: false };
+  assert.deepEqual(formatTaskDueInSection(todayTimed, now), { label: null, time: '18:30', emphasize: false });
+  assert.deepEqual(formatTaskDueInSection(overdueTimed, now), { label: null, time: '10:15', emphasize: true });
+  assert.deepEqual(formatTaskDueInSection(yesterday, now), { label: 'Ayer', time: '09:00', emphasize: true });
+  assert.deepEqual(formatTaskDueInSection(yesterdayAllDay, now), { label: 'Ayer', time: null, emphasize: true });
 });
 
 test('completed tasks scheduled today stay above until the local day ends', () => {
@@ -138,7 +211,7 @@ test('completed tasks scheduled today stay above until the local day ends', () =
   assert.equal(staysInTaskSchedule(completed, now), true);
   assert.equal(staysInTaskSchedule(completed, new Date(2027, 0, 1)), false);
   assert.equal(staysInTaskSchedule({ ...completed, completed: false }, new Date(2027, 0, 1)), true);
-  assert.equal(taskDateSection({ ...completed, completed: false }, new Date(2027, 0, 1)), 'Vencidas');
+  assert.equal(taskDateSection({ ...completed, completed: false }, new Date(2027, 0, 1)), 'Hoy');
   assert.equal(staysInTaskSchedule({ ...completed, hasTime: false }, now), true);
   assert.equal(staysInTaskSchedule({ ...completed, dueAt: null }, now), false);
   assert.equal(staysInTaskSchedule({ ...completed, dueAt: new Date(2027, 0, 1).toISOString() }, now), false);

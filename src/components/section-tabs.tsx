@@ -17,10 +17,11 @@ export default function SectionTabs() {
   const { width } = useWindowDimensions();
   const desktop = width >= 768;
   const insets = useSafeAreaInsets();
-  const taskTextColor = accentTextColor(preferences.tasks, preferences.dark);
-  const habitTextColor = accentTextColor(preferences.habits, preferences.dark);
-  const agendaTextColor = accentTextColor(preferences.agenda, preferences.dark);
-  const inactive = preferences.dark ? '#a6adb8' : '#80868b';
+  const darkBar = preferences.dark;
+  const taskTextColor = accentTextColor(preferences.tasks, darkBar);
+  const habitTextColor = accentTextColor(preferences.habits, darkBar);
+  const agendaTextColor = accentTextColor(preferences.agenda, darkBar);
+  const inactive = darkBar ? '#a6adb8' : '#80868b';
   function navigate(to: Section) {
     if (to === 'tasks' && day) router.setParams({ day: undefined, agendaView: undefined, agendaDate: undefined });
     else if (to === 'tasks') router.navigate('/');
@@ -29,21 +30,21 @@ export default function SectionTabs() {
     else if (to === 'settings') router.navigate('/ajustes');
   }
   return (
-    <View style={[styles.bar, { backgroundColor: preferences.dark ? '#22252b' : '#fff', borderColor: preferences.dark ? '#3a4049' : '#e7ebf0', paddingBottom: Math.max(insets.bottom, 8) }]}>
+    <View style={[styles.bar, { backgroundColor: darkBar ? '#000000' : '#ffffff', borderColor: darkBar ? '#2a2a2a' : '#e7ebf0', paddingBottom: Math.max(insets.bottom, 8) }]}>
       <Pressable accessibilityRole="tab" accessibilityLabel="Tareas" aria-selected={active === 'tasks'} accessibilityState={{ selected: active === 'tasks' }} onPress={() => navigate('tasks')} style={desktop ? styles.desktopTab : styles.tab}>
-        <NavTabFace active={active === 'tasks'} accent={preferences.tasks} dark={preferences.dark}>
+        <NavTabFace active={active === 'tasks'} accent={preferences.tasks} dark={darkBar}>
           <NavTabIcon active={active === 'tasks'}><MaterialIcons name="checklist" size={25} color={active === 'tasks' ? taskTextColor : inactive} /></NavTabIcon>
           <Text style={[styles.label, { color: active === 'tasks' ? taskTextColor : inactive }]}>Tareas</Text>
         </NavTabFace>
       </Pressable>
       <Pressable accessibilityRole="tab" accessibilityLabel="Hábitos" aria-selected={active === 'habits'} accessibilityState={{ selected: active === 'habits' }} onPress={() => navigate('habits')} style={desktop ? styles.desktopTab : styles.tab}>
-        <NavTabFace active={active === 'habits'} accent={preferences.habits} dark={preferences.dark}>
+        <NavTabFace active={active === 'habits'} accent={preferences.habits} dark={darkBar}>
           <NavTabIcon active={active === 'habits'}><View style={styles.iconWrap}>{active === 'habits' ? <MaterialIcons name="local-fire-department" size={25} color={habitTextColor} /> : <Ionicons name="flame" size={24} color={inactive} />}</View></NavTabIcon>
           <Text style={[styles.label, { color: active === 'habits' ? habitTextColor : inactive }]}>Hábitos</Text>
         </NavTabFace>
       </Pressable>
       <Pressable accessibilityRole="tab" accessibilityLabel="Agenda" aria-selected={active === 'agenda'} accessibilityState={{ selected: active === 'agenda' }} onPress={() => navigate('agenda')} style={desktop ? styles.desktopTab : styles.tab}>
-        <NavTabFace active={active === 'agenda'} accent={preferences.agenda} dark={preferences.dark}>
+        <NavTabFace active={active === 'agenda'} accent={preferences.agenda} dark={darkBar}>
           <NavTabIcon active={active === 'agenda'}><MaterialIcons name="event-note" size={24} color={active === 'agenda' ? agendaTextColor : inactive} /></NavTabIcon>
           <Text style={[styles.label, { color: active === 'agenda' ? agendaTextColor : inactive }]}>Agenda</Text>
         </NavTabFace>

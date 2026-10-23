@@ -35,6 +35,6 @@ const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: color('#f8fafd') },
   page: { flex: 1, width: '100%', maxWidth: 660, alignSelf: 'center' },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 24, gap: 20 },
+  content: { paddingHorizontal: 24, paddingTop: 40, paddingBottom: 24, gap: 20 },
   title: { fontFamily: 'Manrope-SemiBold', fontSize: 30, lineHeight: 38, color: color('#202124'), letterSpacing: -1 },
 });

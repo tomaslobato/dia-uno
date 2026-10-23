@@ -4,11 +4,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 type ThemeMode = 'system' | 'light' | 'dark';
 type AccentPreferences = { tasks: string; habits: string; agenda: string };
-type Preferences = AccentPreferences & { dark: boolean };
+type Preferences = AccentPreferences & { dark: boolean; showGreetings: boolean };
 type AppearanceContext = {
   preferences: Preferences;
   themeMode: ThemeMode;
   setThemeMode: (mode: ThemeMode) => void;
+  setShowGreetings: (show: boolean) => void;
   update: (change: Partial<AccentPreferences>) => void;
   ready: boolean;
   error: string | null;
@@ -35,12 +36,13 @@ export const colorChoices = [
 export function AppearanceProvider({ children }: { children: ReactNode }) {
   const systemColorScheme = useColorScheme();
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  const [showGreetings, setShowGreetings] = useState(true);
   const [accents, setAccents] = useState(defaultAccents);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const writes = useRef(Promise.resolve());
   const dark = themeMode === 'system' ? systemColorScheme === 'dark' : themeMode === 'dark';
-  const preferences = useMemo(() => ({ ...accents, dark }), [accents, dark]);
+  const preferences = useMemo(() => ({ ...accents, dark, showGreetings }), [accents, dark, showGreetings]);
   const update = useCallback((change: Partial<AccentPreferences>) => setAccents((current) => ({ ...current, ...change })), []);
 
   useEffect(() => {
@@ -64,6 +66,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
         // Older preferences stored only a dark boolean. Keep an explicit dark choice;
         // old light defaults return to system mode so the new default follows the device.
         setThemeMode(storedMode ?? (stored.dark ? 'dark' : 'system'));
+        if (typeof stored.showGreetings === 'boolean') setShowGreetings(stored.showGreetings);
         const agenda = stored.agenda === '#8755c5' || stored.agenda === '#188038' ? defaultAccents.agenda : stored.agenda ?? defaultAccents.agenda;
         setAccents({ ...defaultAccents, tasks: stored.tasks, habits: stored.habits, agenda });
       }
@@ -74,10 +77,10 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!ready) return;
-    writes.current = writes.current.then(() => AsyncStorage.setItem('tareas.appearance.v1', JSON.stringify({ themeMode, ...accents }))).then(() => setError(null)).catch(() => setError('No pudimos guardar la apariencia.'));
-  }, [accents, ready, themeMode]);
+    writes.current = writes.current.then(() => AsyncStorage.setItem('tareas.appearance.v1', JSON.stringify({ themeMode, showGreetings, ...accents }))).then(() => setError(null)).catch(() => setError('No pudimos guardar la apariencia.'));
+  }, [accents, ready, showGreetings, themeMode]);
 
-  const value = useMemo(() => ({ preferences, themeMode, setThemeMode, update, ready, error }), [preferences, themeMode, update, ready, error]);
+  const value = useMemo(() => ({ preferences, themeMode, setThemeMode, setShowGreetings, update, ready, error }), [preferences, themeMode, update, ready, error]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
@@ -86,7 +89,7 @@ export function useAppearance() {
   if (!context) throw new Error('AppearanceProvider is required');
   const { preferences } = context;
   const palette = {
-    background: preferences.dark ? '#15171b' : '#f8fafd',
+    background: preferences.dark ? '#000000' : '#f8fafd',
     surface: preferences.dark ? '#22252b' : '#ffffff',
     text: preferences.dark ? '#edf0f5' : '#202124',
     muted: preferences.dark ? '#a6adb8' : '#80868b',
