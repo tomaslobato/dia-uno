@@ -3,7 +3,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { DataProvider, useData } from '@/data/data-provider';
 import StreakLossNotice from '@/components/streak-loss-notice';
-import { HabitAttentionProvider } from '@/hooks/habit-attention';
 import { AuthProvider, useAuth } from '@/auth/auth-provider';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -28,7 +27,7 @@ function Navigation() {
     if (ready) void synchronizeTaskReminders(tasks).catch((error) => console.warn('No se pudieron actualizar los recordatorios', error));
   }, [tasks, ready]);
   const owner = session?.user.id ?? 'guest';
-  return <HabitAttentionProvider key={owner} owner={owner}><StatusBar style={preferences.dark ? 'light' : 'dark'} /><View style={{ flex: 1, backgroundColor: background }}><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}><Stack.Screen name="index" options={{ animation: 'fade', animationDuration: 220 }} /><Stack.Screen name="habitos" options={{ animation: 'fade', animationDuration: 220 }} /><Stack.Screen name="agenda" options={{ animation: 'fade', animationDuration: 220 }} /><Stack.Screen name="ajustes" options={{ animation: 'fade', animationDuration: 220 }} /></Stack><SectionTabs /></View><FirstRunWelcome owner={owner} /><StreakLossNotice owner={owner} /></HabitAttentionProvider>;
+  return <><StatusBar style={preferences.dark ? 'light' : 'dark'} /><View style={{ flex: 1, backgroundColor: background }}><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}><Stack.Screen name="index" options={{ animation: 'fade', animationDuration: 220 }} /><Stack.Screen name="habitos" options={{ animation: 'fade', animationDuration: 220 }} /><Stack.Screen name="agenda" options={{ animation: 'fade', animationDuration: 220 }} /><Stack.Screen name="ajustes" options={{ animation: 'fade', animationDuration: 220 }} /></Stack><SectionTabs /></View><FirstRunWelcome owner={owner} /><StreakLossNotice owner={owner} /></>;
 }
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({

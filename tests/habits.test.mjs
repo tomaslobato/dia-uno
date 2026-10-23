@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { habitProgressRange, habitAttentionKeys, lostHabitStreak, habitHistoryYears, createHabit, dayKey, localDay, monthDays, yearWeeks, parseHabits, previousDay, isScheduledDay, toggleHabitDay, habitStreak } from '../src/models/habit.ts';
+import { habitProgressRange, lostHabitStreak, habitHistoryYears, createHabit, dayKey, localDay, monthDays, yearWeeks, parseHabits, previousDay, isScheduledDay, toggleHabitDay, habitStreak } from '../src/models/habit.ts';
 
 test('habit records preserve names, frequency and completed days', () => {
   const habit = createHabit('  Leer  ', 3, localDay('2026-10-08'));
@@ -81,19 +81,6 @@ test('streak loss waits for the configured interval and identifies each expired 
   const restarted = { ...habit, completedDays: [...habit.completedDays, '2026-10-06'] };
   assert.equal(lostHabitStreak(restarted, '2026-10-06'), null);
   assert.notEqual(lostHabitStreak(restarted, '2026-10-09'), loss);
-});
-
-test('habit attention follows frequency, completed days and new daily reminders', () => {
-  const habit = { ...createHabit('Leer', 3, localDay('2026-10-01')), completedDays: ['2026-10-02'] };
-  assert.deepEqual(habitAttentionKeys([habit], '2026-10-04'), []);
-  const due = habitAttentionKeys([habit], '2026-10-05');
-  assert.equal(due.length, 1);
-  const overdue = habitAttentionKeys([habit], '2026-10-06');
-  assert.equal(overdue.length, 2);
-  assert.notEqual(due[0], overdue[0]);
-  assert.deepEqual(habitAttentionKeys([{ ...habit, completedDays: [...habit.completedDays, '2026-10-06'] }], '2026-10-06'), []);
-  assert.deepEqual(habitAttentionKeys([], '2026-10-06'), []);
-  assert.deepEqual(habitAttentionKeys([habit], '2026-09-30'), []);
 });
 
 test('progress range spans the first through last completed day, keeping gaps and excluding future dates', () => {

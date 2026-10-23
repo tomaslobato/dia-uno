@@ -1,44 +1,8 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { usePathname } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import Pressable from '@/components/feedback-pressable';
 import { accentTextColor, useAppearance, useSectionStyles } from '@/theme/appearance';
-
-export default function HabitsWelcome({ owner, onCreate }: { owner: string; onCreate: () => void }) {
-  const { styles } = useSectionStyles(makeStyles, 'habits');
-  const pathname = usePathname();
-  const [visible, setVisible] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(false);
-  const storageKey = `mejordia.habits-welcome.${owner}.v1`;
-  useEffect(() => {
-    let active = true;
-    AsyncStorage.getItem(storageKey).then((seen) => {
-      if (active) setVisible(seen !== 'seen');
-    }).catch(() => { if (active) setVisible(true); });
-    return () => { active = false; };
-  }, [storageKey]);
-  async function close(create = false) {
-    if (saving) return;
-    setSaving(true);
-    try {
-      await AsyncStorage.setItem(storageKey, 'seen');
-      setVisible(false);
-      setError(false);
-      if (create) onCreate();
-    } catch { setError(true); }
-    finally { setSaving(false); }
-  }
-  if (!visible || pathname !== '/habitos') return null;
-  return <Modal transparent visible animationType="fade" onRequestClose={() => void close()}>
-    <View style={styles.overlay}>
-      <Pressable feedback={false} accessibilityLabel="Cerrar bienvenida de hábitos" style={StyleSheet.absoluteFill} onPress={() => void close()} />
-      <View style={styles.sheet}><HabitsWelcomeGuide buttonLabel="Entendido" disabled={saving} errorMessage={error ? 'No pudimos guardar la bienvenida. Intenta cerrarla de nuevo.' : undefined} onContinue={() => void close(true)} /></View>
-    </View>
-  </Modal>;
-}
 
 export function HabitsWelcomeGuide({ buttonLabel, onContinue, disabled = false, errorMessage, showArrow = false, brightenDark = false, fixedFooter = false, buttonColor }: { buttonLabel: string; onContinue: () => void; disabled?: boolean; errorMessage?: string; showArrow?: boolean; brightenDark?: boolean; fixedFooter?: boolean; buttonColor?: string }) {
   const { styles: themedStyles } = useSectionStyles(makeStyles, 'habits');
@@ -92,8 +56,6 @@ export function HabitsWelcomeGuide({ buttonLabel, onContinue, disabled = false, 
 }
 
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: { width: '100%', maxWidth: 600, maxHeight: '85%', borderRadius: 24, backgroundColor: color('#fff'), overflow: 'hidden' },
   guideContainer: { flex: 1 }, guideScroll: { flex: 1 }, guideFooter: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 18 },
   content: { padding: 24, gap: 22 }, guideIconWrap: { width: '100%', alignItems: 'center' }, guideIcon: { width: 54, height: 54, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }, emoji: { fontFamily: 'Manrope-Regular', fontSize: 32, textAlign: 'center' },
   title: { fontFamily: 'Manrope-SemiBold', fontSize: 25, fontWeight: 'normal', color: color('#202124'), textAlign: 'center' },

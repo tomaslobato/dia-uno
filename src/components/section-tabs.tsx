@@ -1,42 +1,11 @@
 import Pressable from '@/components/feedback-pressable';
-import { useHabitAttention } from '@/hooks/habit-attention';
 import { accentTextColor, useAppearance } from '@/theme/appearance';
 import SettingsTab from '@/components/settings-tab';
 import NavTabFace, { NavTabIcon } from '@/components/nav-tab-face';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, usePathname } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { AccessibilityInfo, Animated, AppState, Easing, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-function HabitFlame() {
-  const [motion] = useState(() => new Animated.Value(0));
-  useEffect(() => {
-    let active = true;
-    let reduced = true;
-    let animation: Animated.CompositeAnimation | undefined;
-    const refresh = () => {
-      animation?.stop();
-      motion.setValue(0);
-      if (!active || reduced || (AppState.currentState && AppState.currentState !== 'active')) return;
-      animation = Animated.loop(Animated.sequence([
-        Animated.timing(motion, { toValue: 1, duration: 850, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web', isInteraction: false }),
-        Animated.timing(motion, { toValue: 0, duration: 850, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web', isInteraction: false }),
-      ]));
-      animation.start();
-    };
-    const update = (enabled: boolean) => { if (active) { reduced = enabled; refresh(); } };
-    void AccessibilityInfo.isReduceMotionEnabled().then(update).catch(() => {});
-    const accessibility = AccessibilityInfo.addEventListener('reduceMotionChanged', update);
-    const appState = AppState.addEventListener('change', refresh);
-    return () => { active = false; animation?.stop(); accessibility.remove(); appState.remove(); };
-  }, [motion]);
-  return <Animated.Text pointerEvents="none" accessible={false} style={[styles.flame, { transform: [
-    { translateY: motion.interpolate({ inputRange: [0, 1], outputRange: [0, -2] }) },
-    { rotate: motion.interpolate({ inputRange: [0, 1], outputRange: ['-7deg', '7deg'] }) },
-    { scale: motion.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) },
-  ] }]}>🔥</Animated.Text>;
-}
 
 type Section = 'tasks' | 'habits' | 'agenda' | 'settings';
 
@@ -48,7 +17,6 @@ export default function SectionTabs() {
   const { width } = useWindowDimensions();
   const desktop = width >= 768;
   const insets = useSafeAreaInsets();
-  const attention = useHabitAttention();
   const taskTextColor = accentTextColor(preferences.tasks, preferences.dark);
   const habitTextColor = accentTextColor(preferences.habits, preferences.dark);
   const agendaTextColor = accentTextColor(preferences.agenda, preferences.dark);
@@ -70,7 +38,7 @@ export default function SectionTabs() {
       </Pressable>
       <Pressable accessibilityRole="tab" accessibilityLabel="Hábitos" aria-selected={active === 'habits'} accessibilityState={{ selected: active === 'habits' }} onPress={() => navigate('habits')} style={desktop ? styles.desktopTab : styles.tab}>
         <NavTabFace active={active === 'habits'} accent={preferences.habits} dark={preferences.dark}>
-          <NavTabIcon active={active === 'habits'}><View style={styles.iconWrap}>{active === 'habits' ? <MaterialIcons name="local-fire-department" size={25} color={habitTextColor} /> : <Ionicons name="flame" size={24} color={inactive} />}{attention && <HabitFlame />}</View></NavTabIcon>
+          <NavTabIcon active={active === 'habits'}><View style={styles.iconWrap}>{active === 'habits' ? <MaterialIcons name="local-fire-department" size={25} color={habitTextColor} /> : <Ionicons name="flame" size={24} color={inactive} />}</View></NavTabIcon>
           <Text style={[styles.label, { color: active === 'habits' ? habitTextColor : inactive }]}>Hábitos</Text>
         </NavTabFace>
       </Pressable>
@@ -90,6 +58,5 @@ const styles = StyleSheet.create({
   tab: { width: '25%', flexGrow: 0, flexShrink: 0, height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 18, overflow: 'visible' },
   desktopTab: { width: 120, flexGrow: 0, flexShrink: 0, height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 18, overflow: 'visible' },
   iconWrap: { width: 25, height: 25, alignItems: 'center', justifyContent: 'center' },
-  flame: { position: 'absolute', top: -5, right: -3, fontFamily: 'Manrope-Regular', fontSize: 13, lineHeight: 17, includeFontPadding: false },
   label: { fontFamily: 'Manrope-Medium', fontSize: 10, lineHeight: 13, fontWeight: 'normal' },
 });

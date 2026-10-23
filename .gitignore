@@ -47,3 +47,6 @@ example
 
 # Local APK output
 /artifacts/
+
+# Local development instructions; the public README is user-facing
+/README.local.md

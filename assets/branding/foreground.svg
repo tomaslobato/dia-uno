@@ -1,1 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><path d="M335 510l118 118 250-257" fill="none" stroke="white" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <mask id="target">
+      <rect width="1024" height="1024" fill="#000"/>
+      <circle cx="512" cy="512" r="490" fill="#fff"/>
+      <circle cx="512" cy="512" r="372" fill="#000"/>
+      <circle cx="512" cy="512" r="264" fill="#fff"/>
+      <circle cx="512" cy="512" r="151" fill="#000"/>
+      <circle cx="512" cy="512" r="58" fill="#fff"/>
+    </mask>
+  </defs>
+  <circle cx="512" cy="512" r="490" fill="#fff" mask="url(#target)"/>
+  <path d="M213 831l-77-44 38 87zM195 851l-67 20 60 39z" fill="#eb647c" stroke="#174b99" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M170 870l298-306" fill="none" stroke="#174b99" stroke-width="66" stroke-linecap="round"/>
+  <path d="M170 870l298-306" fill="none" stroke="#1a73e8" stroke-width="42" stroke-linecap="round"/>
+  <path d="M512 512l-14 88-36-35-44-35z" fill="#eb647c" stroke="#174b99" stroke-width="13" stroke-linejoin="round"/>
+</svg>

@@ -108,16 +108,3 @@ export function lostHabitStreak(habit: Habit, today = dayKey()): string | null {
   return last && calendarDayNumber(today) - calendarDayNumber(last) > habit.intervalDays
     ? `${habit.id}:${last}:${habit.intervalDays}` : null;
 }
-
-export function habitAttentionKeys(habits: Habit[], today = dayKey()): string[] {
-  return habits.flatMap((habit) => {
-    if (today < habit.createdOn || habit.completedDays.includes(today)) return [];
-    const last = habit.completedDays.filter((day) => day <= today).sort().at(-1);
-    const due = last ? calendarDayNumber(today) - calendarDayNumber(last) >= habit.intervalDays : isScheduledDay(habit, today);
-    const loss = lostHabitStreak(habit, today);
-    return [
-      ...(due ? [JSON.stringify(['due', habit.id, today])] : []),
-      ...(loss ? [JSON.stringify(['loss', loss])] : []),
-    ];
-  });
-}

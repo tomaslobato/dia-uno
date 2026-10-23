@@ -7,8 +7,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import HabitStreak from '@/components/habit-streak';
 import HabitHistory from '@/components/habit-history';
 import HabitModal from '@/components/habit-modal';
-import HabitsWelcome from '@/components/habits-welcome';
-import { useAuth } from '@/auth/auth-provider';
 import { SectionEntrance } from '@/components/section-motion';
 import { useHabitGreeting } from '@/hooks/use-habit-greeting';
 import { useHabits } from '@/hooks/use-habits';
@@ -18,8 +16,6 @@ export default function HabitsScreen() {
   const greeting = useHabitGreeting();
   const { styles, color } = useSectionStyles(makeStyles, 'habits');
   const { habits, ready, error, addHabit, updateHabit, toggleDay, deleteHabit } = useHabits();
-  const { session } = useAuth();
-  const owner = session?.user.id ?? 'guest';
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [today, setToday] = useState(dayKey());
@@ -31,7 +27,7 @@ export default function HabitsScreen() {
   }, []);
   const current = habits.find((habit) => habit.id === selected);
   return <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}><View style={styles.page}>
-    <SectionEntrance section="/habitos" order={0}><View style={styles.heading}><Text style={styles.title}>{greeting.title}</Text><Text style={styles.subtitle}>{greeting.subtitle}</Text></View></SectionEntrance>
+    <SectionEntrance section="/habitos" order={0}><View style={styles.heading}><Text numberOfLines={1} style={styles.title}>{greeting.title}</Text><Text numberOfLines={1} style={styles.subtitle}>{greeting.subtitle}</Text></View></SectionEntrance>
     {error && <Text style={styles.error}>{error}</Text>}
     <ScrollView style={styles.scroll} contentContainerStyle={styles.list}>
       {!habits.length && <SectionEntrance section="/habitos" order={1}><View style={styles.empty}><MaterialIcons name="calendar-today" size={44} color={color('#188038')} /><Text style={styles.emptyTitle}>{ready ? 'Empezá con un hábito.' : 'Cargando hábitos…'}</Text><Text style={styles.subtitle}>Cada punto cuenta una pequeña victoria.</Text></View></SectionEntrance>}
@@ -46,12 +42,11 @@ export default function HabitsScreen() {
     <Pressable accessibilityRole="button" accessibilityLabel="Nuevo hábito" disabled={!ready} onPress={() => setCreating(true)} style={[styles.newButton, { bottom: 11 }, !ready && { opacity: 0.5 }]}><MaterialIcons name="add" size={25} color="#fff" /><Text style={styles.newText}>Nuevo hábito</Text></Pressable>
     {creating && <HabitModal today={today} onClose={() => setCreating(false)} onSave={addHabit} />}
     {current && <HabitModal key={current.id} habit={current} onDelete={() => deleteHabit(current.id)} today={today} onClose={() => setSelected(null)} onSave={(name, interval, description) => updateHabit(current.id, name, interval, description)} onToggle={(day) => toggleDay(current.id, day)} />}
-    <HabitsWelcome key={owner} owner={owner} onCreate={() => setCreating(true)} />
   </View></SafeAreaView>;
 }
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: color('#f8fafd') }, page: { flex: 1, width: '100%', maxWidth: 660, alignSelf: 'center' }, scroll: { flex: 1 },
-  heading: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 22 }, title: { fontFamily: 'Manrope-SemiBold', fontSize: 30, color: color('#202124'), fontWeight: 'normal', letterSpacing: -1 }, subtitle: { fontFamily: 'Manrope-Regular', fontSize: 13, color: color('#80868b'), marginTop: 9, lineHeight: 20 },
+  heading: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 22 }, title: { fontFamily: 'Manrope-SemiBold', fontSize: 30, lineHeight: 38, color: color('#202124'), fontWeight: 'normal', letterSpacing: -1.2 }, subtitle: { fontFamily: 'Manrope-Regular', fontSize: 13, color: color('#80868b'), marginTop: 5, lineHeight: 19 },
   list: { paddingHorizontal: 20, paddingBottom: 150, gap: 16 }, card: { padding: 20, backgroundColor: color('#fff'), borderRadius: 24, borderWidth: 1, borderColor: color('#e7eee9') },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 }, nameBlock: { flex: 1 }, name: { fontFamily: 'Manrope-SemiBold', fontSize: 19, fontWeight: 'normal', color: color('#253c2d') }, frequency: { fontFamily: 'Manrope-Regular', fontSize: 12, color: color('#7c8980'), marginTop: 6 },
   description: { fontFamily: 'Manrope-Regular', fontSize: 12, lineHeight: 18, color: color('#7c8980'), marginTop: 3 },

@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Modal, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Pressable from '@/components/feedback-pressable';
 import { HabitsWelcomeGuide } from '@/components/habits-welcome';
 import { useAppearance } from '@/theme/appearance';
@@ -18,6 +18,8 @@ export default function FirstRunWelcome({ owner }: { owner: string }) {
   const [slide, setSlide] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(false);
+  const [pageProgress] = useState(() => new Animated.Value(1));
+  const [enterDirection, setEnterDirection] = useState(1);
   const storageKey = `diauno.welcome.${owner}.v1`;
   const habitWelcomeKey = `mejordia.habits-welcome.${owner}.v1`;
 
@@ -42,13 +44,30 @@ export default function FirstRunWelcome({ owner }: { owner: string }) {
     }).catch(() => setError(true)).finally(() => setSaving(false));
   }
 
+  function navigateToSlide(nextSlide: number) {
+    if (nextSlide === slide) return;
+    setEnterDirection(nextSlide > slide ? 1 : -1);
+    pageProgress.setValue(0);
+    setSlide(nextSlide);
+    Animated.timing(pageProgress, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: Platform.OS !== 'web',
+    }).start();
+  }
+
   function back() {
-    if (slide > 0) setSlide((current) => current - 1);
+    if (slide > 0) navigateToSlide(slide - 1);
   }
 
   if (!ready || !visible) return null;
   const accents = [preferences.tasks, preferences.habits, preferences.agenda];
   const accent = accents[slide] ?? preferences.tasks;
+  const pageMotionStyle = {
+    opacity: pageProgress,
+    transform: [{ translateX: pageProgress.interpolate({ inputRange: [0, 1], outputRange: [enterDirection * 28, 0] }) }],
+  };
   return <Modal transparent visible animationType="fade" statusBarTranslucent onRequestClose={back}>
     <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
       <View style={[styles.sheet, { backgroundColor: modalSurface, borderColor: modalBorder }]}>
@@ -57,18 +76,19 @@ export default function FirstRunWelcome({ owner }: { owner: string }) {
           <View style={styles.progress}>{[0, 1, 2].map((index) => <View key={index} style={[styles.progressDot, { backgroundColor: index === slide ? accent : modalBorder }]} />)}</View>
           <View style={styles.back} />
         </View>
+        <Animated.View style={[styles.slideContent, pageMotionStyle]}>
         {slide === 0 && <>
-          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView style={styles.slideScroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             <View style={[styles.brandMark, { backgroundColor: `${preferences.tasks}18`, borderColor: preferences.tasks }]}><MaterialIcons name="checklist" size={28} color={preferences.tasks} /></View>
             <Text accessibilityRole="header" style={[styles.title, { color: modalText }]}>Día Uno</Text>
             <Text style={[styles.subtitle, { color: modalMuted }]}>Organizá tu vida y llegá a tu máximo potencial.</Text>
             <TaskPreview accent={preferences.tasks} surface={preferences.dark ? '#292e36' : surface} border={modalBorder} textColor={modalText} muted={modalMuted} />
           </ScrollView>
-          <Pressable accessibilityRole="button" disabled={saving} onPress={() => setSlide(1)} style={[styles.button, { backgroundColor: preferences.habits }]}><Text style={styles.buttonText}>Hábitos</Text><MaterialIcons name="arrow-forward" size={20} color="#fff" /></Pressable>
+          <Pressable accessibilityRole="button" disabled={saving} onPress={() => navigateToSlide(1)} style={[styles.button, { backgroundColor: preferences.habits }]}><Text style={styles.buttonText}>Hábitos</Text><MaterialIcons name="arrow-forward" size={20} color="#fff" /></Pressable>
         </>}
-        {slide === 1 && <View style={styles.guideWrap}><HabitsWelcomeGuide buttonLabel="Agenda" showArrow brightenDark fixedFooter buttonColor={preferences.agenda} onContinue={() => setSlide(2)} /></View>}
+        {slide === 1 && <View style={styles.guideWrap}><HabitsWelcomeGuide buttonLabel="Agenda" showArrow brightenDark fixedFooter buttonColor={preferences.agenda} onContinue={() => navigateToSlide(2)} /></View>}
         {slide === 2 && <>
-          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView style={styles.slideScroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             <View style={[styles.brandMark, { backgroundColor: `${preferences.agenda}18`, borderColor: preferences.agenda }]}><MaterialIcons name="calendar-month" size={27} color={preferences.agenda} /></View>
             <Text accessibilityRole="header" style={[styles.title, { color: modalText }]}>Agenda</Text>
             <Text style={[styles.subtitle, { color: modalMuted }]}>Una vista completa de tus tareas y hábitos.</Text>
@@ -81,6 +101,7 @@ export default function FirstRunWelcome({ owner }: { owner: string }) {
           {error && <Text style={[styles.error, { color: preferences.habits }]}>No pudimos guardar tus preferencias iniciales. Intenta de nuevo.</Text>}
           <Pressable accessibilityRole="button" disabled={saving} onPress={finish} style={[styles.button, { backgroundColor: '#1a73e8' }]}><Text style={styles.buttonText}>{saving ? 'Guardando…' : 'Personalizar'}</Text><MaterialIcons name="arrow-forward" size={20} color="#fff" /></Pressable>
         </>}
+        </Animated.View>
       </View>
     </View>
   </Modal>;
@@ -127,6 +148,7 @@ function AgendaPreview({ tasks, habits, agenda, surface, border, textColor, mute
 const styles = StyleSheet.create({
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
   sheet: { width: '100%', height: '88%', maxWidth: 520, maxHeight: '91%', borderWidth: 1, borderRadius: 26, overflow: 'hidden' },
+  slideContent: { flex: 1, minHeight: 0 }, slideScroll: { flex: 1 },
   progressRow: { height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18 },
   back: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17 }, backHidden: { opacity: 0 },
   progress: { flexDirection: 'row', alignItems: 'center', gap: 6 }, progressDot: { width: 7, height: 7, borderRadius: 4 },
