@@ -13,6 +13,9 @@ export function remoteForUser(owner: string) {
       if (error.code === '23502' && error.message?.includes('lista_id')) throw new Error('Falta aplicar la actualización de listas opcionales en Supabase. Tus cambios siguen guardados aquí.');
       if (error.message?.includes('Acción inválida para listas')) throw new Error('Falta aplicar la actualización para renombrar y eliminar listas en Supabase. Tus cambios siguen guardados aquí.');
       if (pending.some((op) => op.entity === 'lists') && error.message?.includes('Cambio inválido')) throw new Error('Falta aplicar la actualización de listas en Supabase. Tus cambios siguen guardados aquí.');
+      if (/ocurrencias_completadas|ocurrencias_excluidas|repetir_hasta|repetir_dias/i.test(error.message ?? '')) {
+        throw new Error('Falta aplicar la actualización de tareas recurrentes en Supabase. Tus cambios siguen guardados aquí.');
+      }
       if (['PGRST202', '42P01', '42883'].includes(error.code)) throw new Error('El guardado en la nube aún no está disponible. Tus cambios siguen guardados en este dispositivo.');
       throw new Error('No pudimos sincronizar con Supabase. Tus cambios se conservan aquí y se enviarán al reconectar.');
     }

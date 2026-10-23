@@ -21,7 +21,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { agendaDayLabel, shiftAgendaDay, agendaTasksForDay, validAgendaDay } from '@/models/agenda';
 import { localDay } from '@/models/habit';
 import { useTasks } from '@/hooks/use-tasks';
-import { compareTaskDueDate, matchesTaskDate, staysInTaskSchedule, taskDateSection, type Task } from '@/models/task';
+import { activeOccurrenceDay, asOccurrence, compareTaskDueDate, matchesTaskDate, staysInTaskSchedule, taskDateSection, type Task } from '@/models/task';
 
 export default function TasksScreen() {
   const { day, agendaView, agendaDate } = useLocalSearchParams<{ day?: string; agendaView?: string; agendaDate?: string }>();
@@ -42,7 +42,6 @@ export default function TasksScreen() {
   const managedList = useMemo(() => lists.find((list) => list.id === managingList), [lists, managingList]);
   const [creatingList, setCreatingList] = useState(false);
   const selectedList = useMemo(() => lists.find((list) => list.id === listId), [lists, listId]);
-  const listTasks = useMemo(() => agendaDay ? agendaTasksForDay(visibleTasks, agendaDay, true) : !selectedList ? visibleTasks : visibleTasks.filter((task) => task.listId === selectedList.id), [agendaDay, visibleTasks, selectedList]);
   const greeting = useTaskGreeting();
   const insets = useSafeAreaInsets();
   const [editor, setEditor] = useState<{ task?: Task } | null>(null);
@@ -55,6 +54,11 @@ export default function TasksScreen() {
   const sortKey = agendaDay ? `day:${agendaDay}` : starredOnly ? 'starred' : selectedList ? `list:${selectedList.id}` : 'all';
   const { mode: sortMode, setMode: setSortMode, reorder, sortPending } = useTaskSort(sortKey);
   const [now, setNow] = useState(() => new Date());
+  const projectedTasks = useMemo(() => visibleTasks.map((task) => {
+    const day = activeOccurrenceDay(task, now);
+    return day ? asOccurrence(task, day) : task;
+  }), [visibleTasks, now]);
+  const listTasks = useMemo(() => agendaDay ? agendaTasksForDay(visibleTasks, agendaDay, true, now) : !selectedList ? projectedTasks : projectedTasks.filter((task) => task.listId === selectedList.id), [agendaDay, visibleTasks, projectedTasks, selectedList, now]);
   useEffect(() => {
     const refresh = () => setNow(new Date());
     const timer = setInterval(refresh, 60000);
@@ -76,10 +80,12 @@ export default function TasksScreen() {
   function moveTask(id: string) {
     const task = tasks.find((item) => item.id === id);
     if (!task) return;
+    const day = activeOccurrenceDay(task) ?? undefined;
+    const view = day ? asOccurrence(task, day) : task;
     const staysToday = matchesTaskDate(task, 'today', new Date());
-    setArrival(staysToday ? null : { id, completed: !task.completed });
-    if (!task.completed && !staysToday) setShowCompleted(true);
-    toggleTask(id);
+    setArrival(staysToday ? null : { id, completed: !view.completed });
+    if (!view.completed && !staysToday) setShowCompleted(true);
+    toggleTask(id, day);
   }
   const pendingRaw = useMemo(() => listTasks.filter((task) => staysInTaskSchedule(task, now) && (!starredOnly || task.starred)), [listTasks, now, starredOnly]);
   const pending = useMemo(() => agendaDay ? [...pendingRaw].sort(compareTaskDueDate) : sortPending(pendingRaw), [agendaDay, pendingRaw, sortPending]);
@@ -180,7 +186,11 @@ export default function TasksScreen() {
       {managedList && <TaskListOptions key={managedList.id} list={managedList} onClose={() => setManagingList(null)} onRename={(name) => { renameList(managedList.id, name); setManagingList(null); }} onDelete={() => { deleteList(managedList.id); if (listId === managedList.id) setListId('all'); setManagingList(null); }} />}
       {creatingList && <TaskListCreate onClose={() => setCreatingList(false)} onCreate={(name) => { const id = addList(name); if (id) { setListId(id); setCreatingList(false); } }} />}
       {sortMenuOpen && <TaskSortOptions mode={sortMode} onClose={() => setSortMenuOpen(false)} onSelect={(mode) => mode === 'manual' ? setSortMode('manual', [...pendingRaw].sort(compareTaskDueDate)) : setSortMode('date')} />}
-      {editor && <TaskEditor lists={lists} initialDate={agendaDay ? localDay(agendaDay) : undefined} initialListId={agendaDay ? null : selectedList?.id ?? null} task={editor.task ? tasks.find((task) => task.id === editor.task?.id) ?? editor.task : undefined} onToggle={moveTask} onStar={toggleStar} onSave={saveTask} onDelete={removeTask} onClose={() => setEditor(null)} />}
+      {editor && (() => {
+        const raw = editor.task ? tasks.find((task) => task.id === editor.task?.id) ?? editor.task : undefined;
+        const occurrenceDay = raw ? activeOccurrenceDay(raw, now) ?? undefined : undefined;
+        return <TaskEditor lists={lists} initialDate={agendaDay ? localDay(agendaDay) : undefined} initialListId={agendaDay ? null : selectedList?.id ?? null} task={raw} occurrenceDay={occurrenceDay} onToggle={moveTask} onStar={toggleStar} onSave={saveTask} onDelete={(id, scope) => removeTask(id, { scope, day: occurrenceDay })} onClose={() => setEditor(null)} />;
+      })()}
     </SafeAreaView>
   );
 }

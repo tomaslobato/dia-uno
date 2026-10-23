@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { staysInTaskSchedule, taskDateSection, formatDueDate, formatTaskRepeat, formatTaskDueInSection, matchesTaskDate, compareTaskDueDate, createTask, getTaskReminderAt, isOverdue, materializeSiblingDueAts, nextRecurringDueAt, parseTasks } from '../src/models/task.ts';
+import { staysInTaskSchedule, taskDateSection, formatDueDate, formatTaskRepeat, formatTaskDueInSection, matchesTaskDate, compareTaskDueDate, createTask, getTaskReminderAt, isOverdue, asOccurrence, isOccurrenceCompleted, nextOccurrenceDay, parseTasks, taskOccursOnDay, withOccurrenceDelete, withOccurrenceToggle } from '../src/models/task.ts';
 import { dayKey } from '../src/models/habit.ts';
 
 const draft = { title: '  Comprar pan  ', description: ' Integral ', dueAt: null, hasTime: false };
@@ -115,7 +115,28 @@ test('recurrence labels cover days, weeks with weekday, months and years', () =>
   assert.equal(formatTaskRepeat({ repeatEvery: 2, repeatUnit: 'years', dueAt: tuesday, repeatWeekdays: [] }), 'Cada 2 años');
 });
 
-test('weekly multi-day series creates same-week siblings and advances across selected weekdays', () => {
+test('daily series appears on every following day from a single stored task', () => {
+  const task = createTask({
+    title: 'Agua',
+    description: '',
+    dueAt: new Date(2026, 9, 23, 8).toISOString(),
+    hasTime: true,
+    repeatEvery: 1,
+    repeatUnit: 'days',
+  });
+  assert.equal(taskOccursOnDay(task, '2026-10-23'), true);
+  assert.equal(taskOccursOnDay(task, '2026-10-24'), true);
+  assert.equal(taskOccursOnDay(task, '2026-11-01'), true);
+  assert.equal(taskOccursOnDay(task, '2026-10-22'), false);
+  assert.equal(nextOccurrenceDay(task, '2026-10-23', false), '2026-10-24');
+  const completed = { ...task, ...withOccurrenceToggle(task, '2026-10-23') };
+  assert.equal(isOccurrenceCompleted(completed, '2026-10-23'), true);
+  assert.equal(isOccurrenceCompleted(completed, '2026-10-24'), false);
+  assert.equal(asOccurrence(completed, '2026-10-23').completed, true);
+  assert.equal(asOccurrence(completed, '2026-10-24').completed, false);
+});
+
+test('weekly multi-day series is virtual across selected weekdays', () => {
   const monday = new Date(2026, 9, 12, 9, 30); // lun 12 oct 2026
   const task = createTask({
     title: 'Gym',
@@ -127,42 +148,36 @@ test('weekly multi-day series creates same-week siblings and advances across sel
     repeatWeekdays: [1, 3, 5],
   });
   assert.deepEqual(task.repeatWeekdays, [1, 3, 5]);
-  const siblings = materializeSiblingDueAts(task);
-  assert.deepEqual(siblings.map((due) => new Date(due).getDay()), [3, 5]);
-  assert.deepEqual(siblings.map((due) => dayKey(new Date(due))), ['2026-10-14', '2026-10-16']);
-  const afterMonday = nextRecurringDueAt(task, new Date(2026, 9, 12, 10));
-  assert.equal(new Date(afterMonday).getDay(), 3);
-  assert.equal(new Date(afterMonday).getHours(), 9);
-  const friday = { ...task, dueAt: new Date(2026, 9, 16, 9, 30).toISOString() };
-  const nextWeekMonday = nextRecurringDueAt(friday, new Date(2026, 9, 16, 10));
-  assert.equal(new Date(nextWeekMonday).toDateString(), new Date(2026, 9, 19, 9, 30).toDateString());
+  assert.equal(taskOccursOnDay(task, '2026-10-12'), true);
+  assert.equal(taskOccursOnDay(task, '2026-10-13'), false);
+  assert.equal(taskOccursOnDay(task, '2026-10-14'), true);
+  assert.equal(taskOccursOnDay(task, '2026-10-16'), true);
+  assert.equal(taskOccursOnDay(task, '2026-10-19'), true);
+  assert.equal(nextOccurrenceDay(task, '2026-10-12', false), '2026-10-14');
+  assert.equal(nextOccurrenceDay(task, '2026-10-16', false), '2026-10-19');
 });
 
-test('daily series fills the rest of the calendar week when created', () => {
-  const monday = createTask({
+test('recurring delete scopes exclude one day, end the series, or remove all', () => {
+  const task = createTask({
     title: 'Agua',
     description: '',
-    dueAt: new Date(2026, 9, 12, 8).toISOString(),
+    dueAt: new Date(2026, 9, 23, 8).toISOString(),
     hasTime: true,
     repeatEvery: 1,
     repeatUnit: 'days',
   });
-  assert.deepEqual(
-    materializeSiblingDueAts(monday).map((due) => dayKey(new Date(due))),
-    ['2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18'],
-  );
-  const friday = createTask({
-    title: 'Agua',
-    description: '',
-    dueAt: new Date(2026, 9, 16, 8).toISOString(),
-    hasTime: true,
-    repeatEvery: 1,
-    repeatUnit: 'days',
-  });
-  assert.deepEqual(
-    materializeSiblingDueAts(friday).map((due) => dayKey(new Date(due))),
-    ['2026-10-17', '2026-10-18'],
-  );
+  const onlyThis = withOccurrenceDelete(task, '2026-10-25', 'this');
+  assert.equal(onlyThis.action, 'patch');
+  assert.deepEqual(onlyThis.patch.excludedOccurrences, ['2026-10-25']);
+  assert.equal(taskOccursOnDay({ ...task, ...onlyThis.patch }, '2026-10-25'), false);
+  assert.equal(taskOccursOnDay({ ...task, ...onlyThis.patch }, '2026-10-26'), true);
+  const future = withOccurrenceDelete(task, '2026-10-25', 'future');
+  assert.equal(future.action, 'patch');
+  assert.equal(future.patch.repeatEndsAt, '2026-10-24');
+  assert.equal(taskOccursOnDay({ ...task, ...future.patch }, '2026-10-24'), true);
+  assert.equal(taskOccursOnDay({ ...task, ...future.patch }, '2026-10-25'), false);
+  assert.deepEqual(withOccurrenceDelete(task, '2026-10-23', 'future'), { action: 'delete' });
+  assert.deepEqual(withOccurrenceDelete(task, '2026-10-25', 'all'), { action: 'delete' });
 });
 
 test('past due dates use calendar-day labels across hours and year boundaries', () => {

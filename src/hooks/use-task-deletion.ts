@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/auth/auth-provider';
+import type { TaskDeleteScope } from '@/models/task';
 
-export function useTaskDeletion(deleteTask: (id: string) => void) {
+type DeleteOptions = { scope?: TaskDeleteScope; day?: string };
+
+export function useTaskDeletion(deleteTask: (id: string, options?: DeleteOptions) => void) {
   const { session } = useAuth();
   const owner = session?.user.id ?? 'guest';
   const [removed, setRemoved] = useState<{ id: string; owner: string } | null>(null);
@@ -14,11 +17,19 @@ export function useTaskDeletion(deleteTask: (id: string) => void) {
       if (pending) { clearTimeout(pending.timer); pending.commit(); }
     };
   }, [owner]);
-  function removeTask(id: string) {
+  function removeTask(id: string, options?: DeleteOptions) {
+    const scope = options?.scope ?? 'all';
+    // Occurrence / future edits apply immediately; only full deletes get undo.
+    if (scope !== 'all') {
+      const previous = deletion.current;
+      if (previous) { clearTimeout(previous.timer); previous.commit(); deletion.current = null; setRemoved(null); }
+      deleteTask(id, options);
+      return;
+    }
     const previous = deletion.current;
     if (previous) { clearTimeout(previous.timer); previous.commit(); }
     setRemoved({ id, owner });
-    const commit = () => deleteTask(id);
+    const commit = () => deleteTask(id, { scope: 'all' });
     const timer = setTimeout(() => {
       deletion.current = null;
       commit();

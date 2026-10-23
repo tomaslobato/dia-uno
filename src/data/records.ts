@@ -59,6 +59,9 @@ export function taskFields(task: Partial<Task>): Record<string, unknown> {
   }
   if ('recurrenceId' in task) fields.recurrencia_id = task.recurrenceId;
   if ('repeatWeekdays' in task) fields.repetir_dias = task.repeatWeekdays ?? [];
+  if ('repeatEndsAt' in task) fields.repetir_hasta = task.repeatEndsAt;
+  if ('completedOccurrences' in task) fields.ocurrencias_completadas = task.completedOccurrences ?? [];
+  if ('excludedOccurrences' in task) fields.ocurrencias_excluidas = task.excludedOccurrences ?? [];
   if ('reminderMinutes' in task) fields.recordatorio_minutos = task.reminderMinutes;
   if ('createdAt' in task) fields.creada_en = task.createdAt;
   if ('dueAt' in task) {
@@ -87,11 +90,22 @@ export function encodeMutation(mutation: Mutation) {
   };
 }
 
+function dayKeyFromRemote(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
+function dayKeysFromRemote(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.map(dayKeyFromRemote).filter((day): day is string => Boolean(day));
+}
+
 export function decodeRecords(value: unknown, owner: string): Records {
   if (!value || typeof value !== 'object') throw new Error('Respuesta de datos inválida');
   const rows = value as { tareas?: unknown; habitos?: unknown; listas?: unknown };
   if (!Array.isArray(rows.tareas) || !Array.isArray(rows.habitos)) throw new Error('Respuesta de datos inválida');
-  const taskRows: Task[] = rows.tareas.map((row) => {
+  const taskRows = rows.tareas.map((row) => {
     if (!row || row.usuario_id !== owner) throw new Error('Propietario de datos inválido');
     if (row.fecha !== null && (typeof row.fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(row.fecha))) throw new Error('Fecha inválida');
     if (row.hora !== null && (typeof row.hora !== 'string' || !/^\d{2}:\d{2}:\d{2}/.test(row.hora) || row.fecha === null)) throw new Error('Hora inválida');
@@ -101,6 +115,9 @@ export function decodeRecords(value: unknown, owner: string): Records {
       hasTime: row.hora !== null, starred: row.favorita, completed: row.realizada, createdAt: row.creada_en,
       repeatEvery: row.repetir_cada ?? null, repeatUnit: row.repetir_unidad ?? null, recurrenceId: row.recurrencia_id ?? null,
       repeatWeekdays: Array.isArray(row.repetir_dias) ? row.repetir_dias : undefined,
+      repeatEndsAt: dayKeyFromRemote(row.repetir_hasta),
+      completedOccurrences: dayKeysFromRemote(row.ocurrencias_completadas) ?? [],
+      excludedOccurrences: dayKeysFromRemote(row.ocurrencias_excluidas) ?? [],
       reminderMinutes: row.recordatorio_minutos === undefined ? 30 : row.recordatorio_minutos };
   });
   const habitRows: Habit[] = rows.habitos.map((row) => {

@@ -1,5 +1,5 @@
 import Pressable from '@/components/feedback-pressable';
-import { accentTextColor, useAppearance } from '@/theme/appearance';
+import { accentTextColor, useAppearance, type NavSection } from '@/theme/appearance';
 import SettingsTab from '@/components/settings-tab';
 import NavTabFace, { NavTabIcon } from '@/components/nav-tab-face';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -7,7 +7,7 @@ import { router, useLocalSearchParams, usePathname } from 'expo-router';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type Section = 'tasks' | 'habits' | 'agenda' | 'settings';
+type Section = NavSection | 'settings';
 
 export default function SectionTabs() {
   const pathname = usePathname();
@@ -18,9 +18,6 @@ export default function SectionTabs() {
   const desktop = width >= 768;
   const insets = useSafeAreaInsets();
   const darkBar = preferences.dark;
-  const taskTextColor = accentTextColor(preferences.tasks, darkBar);
-  const habitTextColor = accentTextColor(preferences.habits, darkBar);
-  const agendaTextColor = accentTextColor(preferences.agenda, darkBar);
   const inactive = darkBar ? '#a6adb8' : '#80868b';
   function navigate(to: Section) {
     if (to === 'tasks' && day) router.setParams({ day: undefined, agendaView: undefined, agendaDate: undefined });
@@ -29,26 +26,28 @@ export default function SectionTabs() {
     else if (to === 'agenda') router.navigate({ pathname: '/agenda', params: { ...(agendaView ? { view: agendaView } : {}), ...(agendaDate ? { date: agendaDate } : {}) } });
     else if (to === 'settings') router.navigate('/ajustes');
   }
+  function renderSectionTab(section: NavSection) {
+    const selected = active === section;
+    const accent = preferences[section];
+    const textColor = accentTextColor(accent, darkBar);
+    const label = section === 'tasks' ? 'Tareas' : section === 'habits' ? 'Hábitos' : 'Agenda';
+    const icon = section === 'tasks'
+      ? <MaterialIcons name="checklist" size={25} color={selected ? textColor : inactive} />
+      : section === 'habits'
+        ? <View style={styles.iconWrap}>{selected ? <MaterialIcons name="local-fire-department" size={25} color={textColor} /> : <Ionicons name="flame" size={24} color={inactive} />}</View>
+        : <MaterialIcons name="event-note" size={24} color={selected ? textColor : inactive} />;
+    return (
+      <Pressable key={section} accessibilityRole="tab" accessibilityLabel={label} aria-selected={selected} accessibilityState={{ selected }} onPress={() => navigate(section)} style={desktop ? styles.desktopTab : styles.tab}>
+        <NavTabFace active={selected} accent={accent} dark={darkBar}>
+          <NavTabIcon active={selected}>{icon}</NavTabIcon>
+          <Text style={[styles.label, { color: selected ? textColor : inactive }]}>{label}</Text>
+        </NavTabFace>
+      </Pressable>
+    );
+  }
   return (
     <View style={[styles.bar, { backgroundColor: darkBar ? '#000000' : '#ffffff', borderColor: darkBar ? '#2a2a2a' : '#e7ebf0', paddingBottom: Math.max(insets.bottom, 8) }]}>
-      <Pressable accessibilityRole="tab" accessibilityLabel="Tareas" aria-selected={active === 'tasks'} accessibilityState={{ selected: active === 'tasks' }} onPress={() => navigate('tasks')} style={desktop ? styles.desktopTab : styles.tab}>
-        <NavTabFace active={active === 'tasks'} accent={preferences.tasks} dark={darkBar}>
-          <NavTabIcon active={active === 'tasks'}><MaterialIcons name="checklist" size={25} color={active === 'tasks' ? taskTextColor : inactive} /></NavTabIcon>
-          <Text style={[styles.label, { color: active === 'tasks' ? taskTextColor : inactive }]}>Tareas</Text>
-        </NavTabFace>
-      </Pressable>
-      <Pressable accessibilityRole="tab" accessibilityLabel="Hábitos" aria-selected={active === 'habits'} accessibilityState={{ selected: active === 'habits' }} onPress={() => navigate('habits')} style={desktop ? styles.desktopTab : styles.tab}>
-        <NavTabFace active={active === 'habits'} accent={preferences.habits} dark={darkBar}>
-          <NavTabIcon active={active === 'habits'}><View style={styles.iconWrap}>{active === 'habits' ? <MaterialIcons name="local-fire-department" size={25} color={habitTextColor} /> : <Ionicons name="flame" size={24} color={inactive} />}</View></NavTabIcon>
-          <Text style={[styles.label, { color: active === 'habits' ? habitTextColor : inactive }]}>Hábitos</Text>
-        </NavTabFace>
-      </Pressable>
-      <Pressable accessibilityRole="tab" accessibilityLabel="Agenda" aria-selected={active === 'agenda'} accessibilityState={{ selected: active === 'agenda' }} onPress={() => navigate('agenda')} style={desktop ? styles.desktopTab : styles.tab}>
-        <NavTabFace active={active === 'agenda'} accent={preferences.agenda} dark={darkBar}>
-          <NavTabIcon active={active === 'agenda'}><MaterialIcons name="event-note" size={24} color={active === 'agenda' ? agendaTextColor : inactive} /></NavTabIcon>
-          <Text style={[styles.label, { color: active === 'agenda' ? agendaTextColor : inactive }]}>Agenda</Text>
-        </NavTabFace>
-      </Pressable>
+      {preferences.navOrder.map(renderSectionTab)}
       <SettingsTab active={active === 'settings'} desktop={desktop} inactiveColor={inactive} onPress={() => navigate('settings')} />
     </View>
   );

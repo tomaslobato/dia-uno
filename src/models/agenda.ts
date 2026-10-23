@@ -1,4 +1,4 @@
-import { compareTaskDueDate, type Task } from './task.ts';
+import { asOccurrence, compareTaskDueDate, isRecurringTask, taskOccursOnDay, type Task } from './task.ts';
 import { dayKey, localDay, isScheduledDay, type Habit } from './habit.ts';
 
 export function calendarMonthDays(month: Date): string[][] {
@@ -22,19 +22,42 @@ export function isAgendaTaskOverdue(task: Task, now = new Date()): boolean {
   if (!task.hasTime) due.setHours(23, 59, 59, 999);
   return due.getTime() < now.getTime();
 }
+/** Occurrences that belong on `day`, plus non-recurring overdue items when `includeOverdue` and `day` is today. */
 export function agendaTasksForDay(tasks: Task[], day: string, includeOverdue = false, now = new Date()): Task[] {
-  return tasks.filter((task) => taskAgendaDay(task) === day || (includeOverdue && day === dayKey(now) && isAgendaTaskOverdue(task, now))).sort(compareTaskDueDate);
-}
-export function overdueAgendaDays(tasks: Task[], now = new Date()): Set<string> {
-  const days = new Set<string>();
   const today = dayKey(now);
+  const items: Task[] = [];
   for (const task of tasks) {
-    if (task.completed || !task.dueAt) continue;
-    const due = new Date(task.dueAt);
-    if (!task.hasTime) due.setHours(23, 59, 59, 999);
-    if (due.getTime() < now.getTime()) { days.add(taskAgendaDay(task)!); days.add(today); }
+    if (taskOccursOnDay(task, day)) {
+      items.push(isRecurringTask(task) ? asOccurrence(task, day) : task);
+      continue;
+    }
+    if (includeOverdue && day === today && !isRecurringTask(task) && isAgendaTaskOverdue(task, now)) {
+      items.push(task);
+    }
   }
-  return days;
+  return items.sort(compareTaskDueDate);
+}
+export function overdueAgendaDays(tasks: Task[], days: string[], now = new Date()): Set<string> {
+  const marked = new Set<string>();
+  const today = dayKey(now);
+  for (const day of days) {
+    for (const task of tasks) {
+      if (!taskOccursOnDay(task, day)) continue;
+      const occurrence = isRecurringTask(task) ? asOccurrence(task, day) : task;
+      if (isAgendaTaskOverdue(occurrence, now)) {
+        marked.add(day);
+        if (!isRecurringTask(task)) marked.add(today);
+      }
+    }
+  }
+  for (const task of tasks) {
+    if (isRecurringTask(task) || task.completed || !task.dueAt) continue;
+    if (isAgendaTaskOverdue(task, now)) {
+      const day = taskAgendaDay(task);
+      if (day) { marked.add(day); marked.add(today); }
+    }
+  }
+  return marked;
 }
 export function validAgendaDay(day: unknown): day is string {
   if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;

@@ -1,6 +1,8 @@
-import { dayKey } from './habit.ts';
+import { dayKey, localDay } from './habit.ts';
 import { normalizeTaskListId } from './task-list.ts';
 export type TaskRepeatUnit = 'days' | 'weeks' | 'months' | 'years';
+/** Delete this occurrence, this and following, or the whole series (Google Calendar style). */
+export type TaskDeleteScope = 'this' | 'future' | 'all';
 /** JS `Date#getDay()` values: 0 = Sunday … 6 = Saturday. */
 export type Task = {
   id: string;
@@ -15,6 +17,12 @@ export type Task = {
   repeatEvery: number | null;
   repeatUnit: TaskRepeatUnit | null;
   repeatWeekdays: number[];
+  /** Inclusive last day of the series (`YYYY-MM-DD`), or null for no end. */
+  repeatEndsAt: string | null;
+  /** Day keys where this series occurrence was completed. */
+  completedOccurrences: string[];
+  /** Day keys removed with “solo esta”. */
+  excludedOccurrences: string[];
   recurrenceId: string | null;
   reminderMinutes: number | null;
 };
@@ -25,6 +33,7 @@ export type TaskDraft = Pick<Task, 'title' | 'description' | 'dueAt' | 'hasTime'
   repeatEvery?: number | null;
   repeatUnit?: TaskRepeatUnit | null;
   repeatWeekdays?: number[];
+  repeatEndsAt?: string | null;
   recurrenceId?: string | null;
   reminderMinutes?: number | null;
 };
@@ -62,45 +71,148 @@ export function alignDueToWeekdays(date: Date, weekdays: number[]): Date {
   return new Date(date);
 }
 
-/**
- * Extra due dates to create with a new recurring task so the current week is visible
- * in the agenda (e.g. Lun/Mié/Vie → mié+vie; Todos los días → resto de la semana).
- */
-export function materializeSiblingDueAts(task: Task): string[] {
-  if (!task.dueAt || !task.repeatEvery || !task.repeatUnit) return [];
-  const due = new Date(task.dueAt);
-  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
-  const dueKey = dayKey(dueDay);
-  const startMondayIdx = mondayIndex(dueDay.getDay());
-
-  if (task.repeatUnit === 'weeks') {
-    const weekdays = sortWeekdays(task.repeatWeekdays);
-    if (weekdays.length < 2) return [];
-    const monday = new Date(dueDay);
-    monday.setDate(dueDay.getDate() - startMondayIdx);
-    return weekdays.flatMap((weekday) => {
-      const day = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + mondayIndex(weekday), 12);
-      if (dayKey(day) <= dueKey) return [];
-      return [withDueTime(day, due).toISOString()];
-    });
-  }
-
-  if (task.repeatUnit === 'days') {
-    const result: string[] = [];
-    // Fill through Sunday of the same week on the chosen interval.
-    for (let offset = task.repeatEvery; startMondayIdx + offset <= 6; offset += task.repeatEvery) {
-      const day = new Date(dueDay.getFullYear(), dueDay.getMonth(), dueDay.getDate() + offset, 12);
-      result.push(withDueTime(day, due).toISOString());
-    }
-    return result;
-  }
-
-  return [];
+function validDayKey(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && dayKey(localDay(value)) === value;
 }
 
-/** @deprecated Use materializeSiblingDueAts */
-export function sameWeekSiblingDueAts(task: Task): string[] {
-  return materializeSiblingDueAts(task);
+function normalizeDayKeys(days: string[] | undefined): string[] {
+  return [...new Set((days ?? []).filter(validDayKey))].sort();
+}
+
+function shiftDayKey(day: string, offset: number): string {
+  const date = localDay(day);
+  date.setDate(date.getDate() + offset);
+  return dayKey(date);
+}
+
+function calendarDaysBetween(start: Date, end: Date) {
+  return Math.round((end.getTime() - start.getTime()) / 86400000);
+}
+
+export function isRecurringTask(task: Pick<Task, 'dueAt' | 'repeatEvery' | 'repeatUnit'>): boolean {
+  return Boolean(task.dueAt && task.repeatEvery && task.repeatUnit);
+}
+
+/** Whether the single stored series has a visible occurrence on `day` (virtual, not cloned). */
+export function taskOccursOnDay(task: Task, day: string): boolean {
+  if (!task.dueAt || !validDayKey(day)) return false;
+  if (task.excludedOccurrences.includes(day)) return false;
+  const start = dayKey(new Date(task.dueAt));
+  if (day < start) return false;
+  if (task.repeatEndsAt && day > task.repeatEndsAt) return false;
+  if (!isRecurringTask(task)) return day === start;
+
+  const startDate = localDay(start);
+  const date = localDay(day);
+  const every = task.repeatEvery!;
+
+  if (task.repeatUnit === 'days') {
+    const diff = calendarDaysBetween(startDate, date);
+    return diff >= 0 && diff % every === 0;
+  }
+  if (task.repeatUnit === 'weeks') {
+    const weekdays = sortWeekdays(task.repeatWeekdays.length ? task.repeatWeekdays : [startDate.getDay()]);
+    if (!weekdays.includes(date.getDay())) return false;
+    const startMonday = new Date(startDate);
+    startMonday.setDate(startDate.getDate() - mondayIndex(startDate.getDay()));
+    const dayMonday = new Date(date);
+    dayMonday.setDate(date.getDate() - mondayIndex(date.getDay()));
+    const weeks = calendarDaysBetween(startMonday, dayMonday) / 7;
+    return weeks >= 0 && weeks % every === 0;
+  }
+  if (task.repeatUnit === 'months') {
+    const months = (date.getFullYear() - startDate.getFullYear()) * 12 + (date.getMonth() - startDate.getMonth());
+    if (months < 0 || months % every !== 0) return false;
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    return date.getDate() === Math.min(startDate.getDate(), lastDay);
+  }
+  const years = date.getFullYear() - startDate.getFullYear();
+  if (years < 0 || years % every !== 0) return false;
+  if (date.getMonth() !== startDate.getMonth()) return false;
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  return date.getDate() === Math.min(startDate.getDate(), lastDay);
+}
+
+export function occurrenceDueAt(task: Task, day: string): string {
+  const base = task.dueAt ? new Date(task.dueAt) : localDay(day);
+  const date = localDay(day);
+  if (!task.hasTime) return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0).toISOString();
+  return withDueTime(date, base).toISOString();
+}
+
+export function isOccurrenceCompleted(task: Task, day: string): boolean {
+  if (!isRecurringTask(task)) return task.completed;
+  return task.completedOccurrences.includes(day);
+}
+
+/** Display copy of the series for one calendar day (same id, virtual due/completed). */
+export function asOccurrence(task: Task, day: string): Task {
+  return {
+    ...task,
+    dueAt: occurrenceDueAt(task, day),
+    completed: isOccurrenceCompleted(task, day),
+  };
+}
+
+/** Next day key on or after `fromDay` where the series appears. */
+export function nextOccurrenceDay(task: Task, fromDay = dayKey(), inclusive = true): string | null {
+  if (!task.dueAt) return null;
+  let cursor = inclusive ? fromDay : shiftDayKey(fromDay, 1);
+  const start = dayKey(new Date(task.dueAt));
+  if (cursor < start) cursor = start;
+  for (let guard = 0; guard < 4000; guard++) {
+    if (task.repeatEndsAt && cursor > task.repeatEndsAt) return null;
+    if (taskOccursOnDay(task, cursor)) return cursor;
+    if (!isRecurringTask(task)) return null;
+    cursor = shiftDayKey(cursor, 1);
+  }
+  return null;
+}
+
+/** Day used for list rows: today if it occurs, otherwise the next upcoming occurrence. */
+export function activeOccurrenceDay(task: Task, now = new Date()): string | null {
+  if (!task.dueAt) return null;
+  const today = dayKey(now);
+  if (taskOccursOnDay(task, today)) return today;
+  return nextOccurrenceDay(task, today, true);
+}
+
+export function withOccurrenceToggle(task: Task, day: string): Partial<Task> {
+  if (!isRecurringTask(task)) return { completed: !task.completed };
+  const done = task.completedOccurrences.includes(day);
+  return {
+    completedOccurrences: done
+      ? task.completedOccurrences.filter((key) => key !== day)
+      : [...task.completedOccurrences, day].sort(),
+  };
+}
+
+export function withOccurrenceDelete(
+  task: Task,
+  day: string,
+  scope: TaskDeleteScope,
+): { action: 'delete' } | { action: 'patch'; patch: Partial<Task> } {
+  if (!isRecurringTask(task) || scope === 'all') return { action: 'delete' };
+  if (scope === 'this') {
+    return {
+      action: 'patch',
+      patch: {
+        excludedOccurrences: [...new Set([...task.excludedOccurrences, day])].sort(),
+        completedOccurrences: task.completedOccurrences.filter((key) => key !== day),
+      },
+    };
+  }
+  const end = shiftDayKey(day, -1);
+  const start = dayKey(new Date(task.dueAt!));
+  if (end < start) return { action: 'delete' };
+  return {
+    action: 'patch',
+    patch: {
+      repeatEndsAt: end,
+      completedOccurrences: task.completedOccurrences.filter((key) => key <= end),
+      excludedOccurrences: task.excludedOccurrences.filter((key) => key <= end),
+    },
+  };
 }
 
 export function createTask(draft: TaskDraft, now = new Date(), id = `${now.getTime()}-${Math.random().toString(36).slice(2, 10)}`): Task {
@@ -108,6 +220,7 @@ export function createTask(draft: TaskDraft, now = new Date(), id = `${now.getTi
   const repeatUnit = repeatEvery === null ? null : draft.repeatUnit ?? 'days';
   const dueAt = draft.dueAt ?? null;
   const repeatWeekdays = normalizeWeekdays(repeatUnit, draft.repeatWeekdays, dueAt);
+  const repeatEndsAt = repeatEvery && draft.repeatEndsAt && validDayKey(draft.repeatEndsAt) ? draft.repeatEndsAt : null;
   return {
     listId: normalizeTaskListId(draft.listId),
     title: draft.title.trim(),
@@ -121,55 +234,18 @@ export function createTask(draft: TaskDraft, now = new Date(), id = `${now.getTi
     repeatEvery,
     repeatUnit,
     repeatWeekdays,
+    repeatEndsAt,
+    completedOccurrences: [],
+    excludedOccurrences: [],
     recurrenceId: repeatEvery === null ? null : draft.recurrenceId ?? id,
     reminderMinutes: draft.reminderMinutes === undefined ? 30 : draft.reminderMinutes,
   };
 }
 
-export function nextRecurringDueAt(task: Task, now = new Date(), anchorDueAt?: string | null): string | null {
-  if (!task.dueAt || !task.repeatEvery || !task.repeatUnit) return null;
-  const due = new Date(task.dueAt);
-  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const anchorDay = new Date(anchorDueAt ?? task.dueAt).getDate();
-  const weekdays = sortWeekdays(task.repeatWeekdays);
-
-  if (task.repeatUnit === 'weeks' && weekdays.length > 0) {
-    let cursor = new Date(dueDay);
-    for (let guard = 0; guard < 400; guard++) {
-      const currentIdx = mondayIndex(cursor.getDay());
-      const laterSameWeek = weekdays.find((day) => mondayIndex(day) > currentIdx);
-      if (laterSameWeek !== undefined) {
-        cursor.setDate(cursor.getDate() + (mondayIndex(laterSameWeek) - currentIdx));
-      } else {
-        const monday = new Date(cursor);
-        monday.setDate(cursor.getDate() - currentIdx);
-        monday.setDate(monday.getDate() + task.repeatEvery! * 7 + mondayIndex(weekdays[0]));
-        cursor = monday;
-      }
-      if (cursor > today) {
-        return withDueTime(cursor, due).toISOString();
-      }
-    }
-    return null;
-  }
-
-  const add = () => {
-    if (task.repeatUnit === 'days') dueDay.setDate(dueDay.getDate() + task.repeatEvery!);
-    else if (task.repeatUnit === 'weeks') dueDay.setDate(dueDay.getDate() + task.repeatEvery! * 7);
-    else if (task.repeatUnit === 'months') {
-      dueDay.setDate(1);
-      dueDay.setMonth(dueDay.getMonth() + task.repeatEvery!);
-      dueDay.setDate(Math.min(anchorDay, new Date(dueDay.getFullYear(), dueDay.getMonth() + 1, 0).getDate()));
-    } else if (task.repeatUnit === 'years') {
-      dueDay.setDate(1);
-      dueDay.setFullYear(dueDay.getFullYear() + task.repeatEvery!);
-      dueDay.setMonth(due.getMonth());
-      dueDay.setDate(Math.min(anchorDay, new Date(dueDay.getFullYear(), dueDay.getMonth() + 1, 0).getDate()));
-    }
-  };
-  do { add(); } while (dueDay <= today);
-  return withDueTime(dueDay, due).toISOString();
+/** @deprecated Prefer nextOccurrenceDay + occurrenceDueAt for virtual series. */
+export function nextRecurringDueAt(task: Task, now = new Date()): string | null {
+  const day = nextOccurrenceDay(task, dayKey(now), false);
+  return day ? occurrenceDueAt(task, day) : null;
 }
 
 export function getTaskReminderAt(task: Task): number | null {
@@ -189,6 +265,7 @@ export function parseTasks(value: string | null): Task[] {
     const repeatUnit = task.repeatUnit ?? (legacyRecurrence === 'weekly' ? 'weeks' : legacyRecurrence === 'monthly' || legacyRecurrence === 'yearly' ? 'months' : repeatEvery ? 'days' : null);
     const { recurrence: _legacy, ...current } = task as Task & { recurrence?: string };
     const dueAt = current.dueAt ?? null;
+    const repeatEndsAt = current.repeatEndsAt && validDayKey(current.repeatEndsAt) ? current.repeatEndsAt : null;
     return {
       ...current,
       starred: task.starred ?? false,
@@ -196,6 +273,9 @@ export function parseTasks(value: string | null): Task[] {
       repeatEvery,
       repeatUnit,
       repeatWeekdays: normalizeWeekdays(repeatUnit, task.repeatWeekdays, dueAt),
+      repeatEndsAt: repeatEvery ? repeatEndsAt : null,
+      completedOccurrences: normalizeDayKeys(task.completedOccurrences),
+      excludedOccurrences: normalizeDayKeys(task.excludedOccurrences),
       recurrenceId: task.recurrenceId ?? (repeatEvery === null ? null : task.id),
       reminderMinutes: task.reminderMinutes === undefined ? 30 : task.reminderMinutes,
     };
@@ -205,6 +285,7 @@ export function parseTasks(value: string | null): Task[] {
 function isTask(value: unknown): value is Task {
   if (!value || typeof value !== 'object') return false;
   const task = value as Partial<Task>;
+  const dayListOk = (value: unknown) => value === undefined || (Array.isArray(value) && value.every((day) => typeof day === 'string'));
   return (
     typeof task.id === 'string' && typeof task.title === 'string' && task.title.trim().length > 0 &&
     typeof task.description === 'string' && typeof task.completed === 'boolean' &&
@@ -214,6 +295,8 @@ function isTask(value: unknown): value is Task {
     (task.repeatEvery === undefined || task.repeatEvery === null || (typeof task.repeatEvery === 'number' && Number.isInteger(task.repeatEvery) && task.repeatEvery >= 1 && task.repeatEvery <= 10000)) &&
     (task.repeatUnit === undefined || task.repeatUnit === null || ['days', 'weeks', 'months', 'years'].includes(task.repeatUnit)) &&
     (task.repeatWeekdays === undefined || (Array.isArray(task.repeatWeekdays) && task.repeatWeekdays.every((day) => typeof day === 'number' && Number.isInteger(day) && day >= 0 && day <= 6))) &&
+    (task.repeatEndsAt === undefined || task.repeatEndsAt === null || typeof task.repeatEndsAt === 'string') &&
+    dayListOk(task.completedOccurrences) && dayListOk(task.excludedOccurrences) &&
     (task.recurrenceId === undefined || task.recurrenceId === null || typeof task.recurrenceId === 'string') &&
     (task.reminderMinutes === undefined || task.reminderMinutes === null || (typeof task.reminderMinutes === 'number' && Number.isInteger(task.reminderMinutes) && task.reminderMinutes >= 1 && task.reminderMinutes <= 10080)) &&
     (task.dueAt === null || (typeof task.dueAt === 'string' && Number.isFinite(Date.parse(task.dueAt))))
@@ -270,8 +353,16 @@ export function formatDueDate(dueAt: string, hasTime: boolean, today = new Date(
 }
 
 export function isOverdue(task: Task, now = new Date()): boolean {
-  if (!task.dueAt || task.completed) return false;
-  const due = new Date(task.dueAt);
+  let dueAt = task.dueAt;
+  let completed = task.completed;
+  if (isRecurringTask(task)) {
+    const day = activeOccurrenceDay(task, now);
+    if (!day) return false;
+    completed = isOccurrenceCompleted(task, day);
+    dueAt = occurrenceDueAt(task, day);
+  }
+  if (!dueAt || completed) return false;
+  const due = new Date(dueAt);
   if (!task.hasTime) due.setHours(23, 59, 59, 999);
   return due.getTime() < now.getTime();
 }
@@ -310,13 +401,15 @@ export type TaskDateFilter = 'all' | 'today' | 'week';
 export function matchesTaskDate(task: Task, filter: TaskDateFilter, now = new Date()): boolean {
   if (filter === 'all') return true;
   if (!task.dueAt) return false;
+  if (filter === 'today') return taskOccursOnDay(task, dayKey(now));
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
-  if (filter === 'week') start.setDate(start.getDate() - (start.getDay() + 6) % 7);
-  const end = new Date(start);
-  end.setDate(end.getDate() + (filter === 'week' ? 7 : 1));
-  const due = new Date(task.dueAt).getTime();
-  return due >= start.getTime() && due < end.getTime();
+  start.setDate(start.getDate() - (start.getDay() + 6) % 7);
+  for (let offset = 0; offset < 7; offset++) {
+    const day = dayKey(new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset, 12));
+    if (taskOccursOnDay(task, day)) return true;
+  }
+  return false;
 }
 
 function calendarDayDiff(due: Date, now: Date) {
@@ -325,8 +418,9 @@ function calendarDayDiff(due: Date, now: Date) {
 }
 
 export function taskDateSection(task: Task, now = new Date()): string {
-  if (!task.dueAt) return 'Sin fecha';
-  const due = new Date(task.dueAt);
+  const day = isRecurringTask(task) ? activeOccurrenceDay(task, now) : task.dueAt ? dayKey(new Date(task.dueAt)) : null;
+  if (!day) return 'Sin fecha';
+  const due = localDay(day);
   const difference = calendarDayDiff(due, now);
   // Overdue tasks stay under Hoy so the list always starts from today.
   if (difference <= 0) return 'Hoy';
@@ -362,5 +456,10 @@ export function formatTaskDueInSection(task: Task, now = new Date()): { label: s
 
 // Today's scheduled tasks stay together until the local calendar day ends.
 export function staysInTaskSchedule(task: Task, now = new Date()): boolean {
+  if (isRecurringTask(task)) {
+    const day = activeOccurrenceDay(task, now);
+    if (!day) return false;
+    return !isOccurrenceCompleted(task, day) || day === dayKey(now);
+  }
   return !task.completed || matchesTaskDate(task, 'today', now);
 }

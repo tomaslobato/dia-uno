@@ -4,6 +4,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { calendarMonthDays } from '@/models/agenda';
+import { dayKey, localDay } from '@/models/habit';
 import type { TaskRepeatUnit } from '@/models/task';
 
 const WEEKDAYS = [
@@ -30,17 +32,6 @@ type Props = {
   onClose: () => void;
 };
 
-function monthMatrix(anchor: Date) {
-  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-  const start = new Date(first);
-  start.setDate(1 - ((first.getDay() + 6) % 7));
-  return Array.from({ length: 42 }, (_, index) => {
-    const day = new Date(start);
-    day.setDate(start.getDate() + index);
-    return day;
-  });
-}
-
 export default function TaskRepeatModal({ initial, onDone, onClose }: Props) {
   const { styles, color } = useSectionStyles(makeStyles, 'tasks');
   const insets = useSafeAreaInsets();
@@ -51,10 +42,13 @@ export default function TaskRepeatModal({ initial, onDone, onClose }: Props) {
   const [endsAt, setEndsAt] = useState<Date | null>(initial.endsAt);
   const [month, setMonth] = useState(() => {
     const base = initial.endsAt ?? new Date();
-    return new Date(base.getFullYear(), base.getMonth(), 1);
+    return new Date(base.getFullYear(), base.getMonth(), 1, 12);
   });
-  const days = useMemo(() => monthMatrix(month), [month]);
+  const monthYear = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const weeks = useMemo(() => calendarMonthDays(new Date(monthYear, monthIndex, 1, 12)), [monthYear, monthIndex]);
   const monthLabel = month.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+  const endsKey = endsAt ? dayKey(endsAt) : null;
 
   function toggleWeekday(day: number) {
     setWeekdays((current) => {
@@ -147,8 +141,9 @@ export default function TaskRepeatModal({ initial, onDone, onClose }: Props) {
               <Pressable accessibilityRole="button" accessibilityLabel="Elegir fecha de fin" onPress={() => {
                 const next = endsAt ?? new Date();
                 if (!endsAt) next.setMonth(next.getMonth() + 1);
+                next.setHours(12, 0, 0, 0);
                 setEndsAt(next);
-                setMonth(new Date(next.getFullYear(), next.getMonth(), 1));
+                setMonth(new Date(next.getFullYear(), next.getMonth(), 1, 12));
               }} style={[styles.chip, endsAt && styles.chipSelected]}>
                 <MaterialIcons name="event" size={16} color={color(endsAt ? '#1a73e8' : '#5f6368')} />
                 <Text style={[styles.chipText, endsAt && styles.chipTextSelected]}>{endsAt ? endsAt.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Elegir día'}</Text>
@@ -156,19 +151,29 @@ export default function TaskRepeatModal({ initial, onDone, onClose }: Props) {
             </View>
             {endsAt && <>
               <View style={styles.monthHeader}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Mes anterior" onPress={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} style={styles.monthArrow}><MaterialIcons name="chevron-left" size={24} color={color('#202124')} /></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Mes anterior" onPress={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1, 12))} style={styles.monthArrow}><MaterialIcons name="chevron-left" size={24} color={color('#202124')} /></Pressable>
                 <Text style={styles.monthTitle}>{monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}</Text>
-                <Pressable accessibilityRole="button" accessibilityLabel="Mes siguiente" onPress={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} style={styles.monthArrow}><MaterialIcons name="chevron-right" size={24} color={color('#202124')} /></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Mes siguiente" onPress={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1, 12))} style={styles.monthArrow}><MaterialIcons name="chevron-right" size={24} color={color('#202124')} /></Pressable>
               </View>
               <View style={styles.weekHeader}>{['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((label) => <Text key={label} style={styles.weekHeaderText}>{label}</Text>)}</View>
               <View style={styles.grid}>
-                {days.map((day) => {
-                  const outside = day.getMonth() !== month.getMonth();
-                  const selected = endsAt.toDateString() === day.toDateString();
-                  return <Pressable key={day.toISOString()} accessibilityRole="button" accessibilityLabel={day.toLocaleDateString('es-AR')} onPress={() => setEndsAt(new Date(day.getFullYear(), day.getMonth(), day.getDate()))} style={[styles.dayCell, selected && styles.daySelected]}>
-                    <Text style={[styles.dayText, outside && styles.dayOutside, selected && styles.daySelectedText]}>{day.getDate()}</Text>
-                  </Pressable>;
-                })}
+                {weeks.map((week) => (
+                  <View key={week[0]} style={styles.weekRow}>
+                    {week.map((day) => {
+                      const dateValue = localDay(day);
+                      const outside = dateValue.getMonth() !== monthIndex;
+                      const selected = endsKey === day;
+                      return (
+                        <Pressable key={day} accessibilityRole="button" accessibilityLabel={dateValue.toLocaleDateString('es-AR')} onPress={() => {
+                          setEndsAt(localDay(day));
+                          setMonth(new Date(dateValue.getFullYear(), dateValue.getMonth(), 1, 12));
+                        }} style={[styles.dayCell, selected && styles.daySelected]}>
+                          <Text style={[styles.dayText, outside && styles.dayOutside, selected && styles.daySelectedText]}>{dateValue.getDate()}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ))}
               </View>
             </>}
           </ScrollView>
@@ -179,8 +184,8 @@ export default function TaskRepeatModal({ initial, onDone, onClose }: Props) {
 }
 
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: { backgroundColor: color('#fff'), borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%', paddingHorizontal: 20, paddingTop: 14 },
+  overlay: { flex: 1, justifyContent: 'flex-end', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
+  sheet: { width: '100%', maxWidth: 420, alignSelf: 'center', backgroundColor: color('#fff'), borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%', paddingHorizontal: 20, paddingTop: 14 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   title: { fontFamily: 'Manrope-SemiBold', fontSize: 18, color: color('#202124') },
   done: { paddingHorizontal: 8, paddingVertical: 6 },
@@ -211,10 +216,11 @@ const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   monthHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   monthArrow: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   monthTitle: { fontFamily: 'Manrope-SemiBold', fontSize: 16, color: color('#202124') },
-  weekHeader: { flexDirection: 'row' },
+  weekHeader: { flexDirection: 'row', width: '100%', maxWidth: 360, alignSelf: 'center' },
   weekHeaderText: { flex: 1, textAlign: 'center', fontFamily: 'Manrope-Medium', fontSize: 11, color: color('#80868b') },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  dayCell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 20 },
+  grid: { gap: 2, width: '100%', maxWidth: 360, alignSelf: 'center' },
+  weekRow: { flexDirection: 'row' },
+  dayCell: { flex: 1, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 20 },
   daySelected: { backgroundColor: color('#1a73e8') },
   dayText: { fontFamily: 'Manrope-Medium', fontSize: 14, color: color('#202124') },
   dayOutside: { color: color('#9aa0a6') },

@@ -3,21 +3,36 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 type ThemeMode = 'system' | 'light' | 'dark';
+export type NavSection = 'tasks' | 'habits' | 'agenda';
 type AccentPreferences = { tasks: string; habits: string; agenda: string };
-type Preferences = AccentPreferences & { dark: boolean; showGreetings: boolean };
+type Preferences = AccentPreferences & { dark: boolean; showGreetings: boolean; navOrder: NavSection[] };
 type AppearanceContext = {
   preferences: Preferences;
   themeMode: ThemeMode;
   setThemeMode: (mode: ThemeMode) => void;
   setShowGreetings: (show: boolean) => void;
+  setNavOrder: (order: NavSection[]) => void;
   update: (change: Partial<AccentPreferences>) => void;
   ready: boolean;
   error: string | null;
 };
 const defaultAccents: AccentPreferences = { tasks: '#1a73e8', habits: '#d65c66', agenda: '#bf4f91' };
+export const defaultNavOrder: NavSection[] = ['tasks', 'habits', 'agenda'];
 const Context = createContext<AppearanceContext | null>(null);
 const validThemeModes: ThemeMode[] = ['system', 'light', 'dark'];
 const isColor = (value: unknown): value is string => typeof value === 'string' && /^#[a-f\d]{6}$/i.test(value);
+
+export function normalizeNavOrder(value: unknown): NavSection[] {
+  const allowed: NavSection[] = ['tasks', 'habits', 'agenda'];
+  const cleaned = Array.isArray(value)
+    ? value.filter((item): item is NavSection => typeof item === 'string' && (allowed as string[]).includes(item))
+    : [];
+  const unique = [...new Set(cleaned)];
+  for (const item of defaultNavOrder) {
+    if (!unique.includes(item)) unique.push(item);
+  }
+  return unique.slice(0, 3);
+}
 
 export function accentTextColor(accent: string, dark: boolean) {
   if (!dark || !isColor(accent)) return accent;
@@ -37,13 +52,15 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   const systemColorScheme = useColorScheme();
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const [showGreetings, setShowGreetings] = useState(true);
+  const [navOrder, setNavOrderState] = useState<NavSection[]>(defaultNavOrder);
   const [accents, setAccents] = useState(defaultAccents);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const writes = useRef(Promise.resolve());
   const dark = themeMode === 'system' ? systemColorScheme === 'dark' : themeMode === 'dark';
-  const preferences = useMemo(() => ({ ...accents, dark, showGreetings }), [accents, dark, showGreetings]);
+  const preferences = useMemo(() => ({ ...accents, dark, showGreetings, navOrder }), [accents, dark, showGreetings, navOrder]);
   const update = useCallback((change: Partial<AccentPreferences>) => setAccents((current) => ({ ...current, ...change })), []);
+  const setNavOrder = useCallback((order: NavSection[]) => setNavOrderState(normalizeNavOrder(order)), []);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
@@ -67,6 +84,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
         // old light defaults return to system mode so the new default follows the device.
         setThemeMode(storedMode ?? (stored.dark ? 'dark' : 'system'));
         if (typeof stored.showGreetings === 'boolean') setShowGreetings(stored.showGreetings);
+        setNavOrderState(normalizeNavOrder(stored.navOrder));
         const agenda = stored.agenda === '#8755c5' || stored.agenda === '#188038' ? defaultAccents.agenda : stored.agenda ?? defaultAccents.agenda;
         setAccents({ ...defaultAccents, tasks: stored.tasks, habits: stored.habits, agenda });
       }
@@ -77,10 +95,10 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!ready) return;
-    writes.current = writes.current.then(() => AsyncStorage.setItem('tareas.appearance.v1', JSON.stringify({ themeMode, showGreetings, ...accents }))).then(() => setError(null)).catch(() => setError('No pudimos guardar la apariencia.'));
-  }, [accents, ready, showGreetings, themeMode]);
+    writes.current = writes.current.then(() => AsyncStorage.setItem('tareas.appearance.v1', JSON.stringify({ themeMode, showGreetings, navOrder, ...accents }))).then(() => setError(null)).catch(() => setError('No pudimos guardar la apariencia.'));
+  }, [accents, navOrder, ready, showGreetings, themeMode]);
 
-  const value = useMemo(() => ({ preferences, themeMode, setThemeMode, setShowGreetings, update, ready, error }), [preferences, themeMode, update, ready, error]);
+  const value = useMemo(() => ({ preferences, themeMode, setThemeMode, setShowGreetings, setNavOrder, update, ready, error }), [preferences, themeMode, setNavOrder, update, ready, error]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 

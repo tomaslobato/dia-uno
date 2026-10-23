@@ -26,5 +26,5 @@ export function SectionEntrance({ section, order, children, style }: { section: 
     wasActive.current = active;
   }, [active, opacity, order]);
 
-  return <Animated.View style={[style, { opacity }]}>{children}</Animated.View>;
+  return <Animated.View collapsable={false} style={[style, { opacity }, Platform.OS === 'web' ? { display: 'flex' as const } : null]}>{children}</Animated.View>;
 }
