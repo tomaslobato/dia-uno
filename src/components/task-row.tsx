@@ -6,9 +6,9 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, PanResponder, StyleSheet, Text, View } from 'react-native';
 import { formatDueDate, formatTaskDueInSection, isOverdue, type Task } from '@/models/task';
 
-type Props = { task: Task; listName?: string; onToggle: () => void; onEdit: () => void; onStar: () => void; onDelete: (id: string) => void; animateArrival?: boolean; keepInPlace?: boolean; swipeDeleteEnabled?: boolean; isDragging?: boolean; dragHandleHandlers?: object; dueMode?: 'full' | 'section'; clockKey?: number };
+type Props = { task: Task; listName?: string; onToggle: () => void; onEdit: () => void; onStar: () => void; onDelete: (id: string) => void; animateArrival?: boolean; keepInPlace?: boolean; swipeDeleteEnabled?: boolean; isDragging?: boolean; showReorderHandle?: boolean; onReorderLongPress?: () => void; onReorderPressOut?: () => void; dueMode?: 'full' | 'section'; clockKey?: number };
 
-function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateArrival = false, keepInPlace = false, swipeDeleteEnabled = true, isDragging = false, dragHandleHandlers, dueMode = 'full' }: Props) {
+function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateArrival = false, keepInPlace = false, swipeDeleteEnabled = true, isDragging = false, showReorderHandle = false, onReorderLongPress, onReorderPressOut, dueMode = 'full' }: Props) {
   const canPress = useAgendaCanPress();
   const { styles, color, accentText, preferences } = useSectionStyles(makeStyles, 'tasks');
   const divider = preferences.dark ? '#1a1c20' : '#eceef2';
@@ -40,6 +40,7 @@ function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateAr
   const [lines, setLines] = useState<{ x: number; y: number; width: number; height: number }[]>([]);
 
   const [translateX] = useState(() => new Animated.Value(0));
+  const [slideY] = useState(() => new Animated.Value(0));
   const rowWidth = useRef(320);
   const deleting = useRef(false);
   const dragging = useRef(false);
@@ -76,9 +77,10 @@ function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateAr
   function toggleWithAnimation() {
     if (!canPress() || transitioning || dragging.current || deleting.current) return;
     setTransitioning(true);
+    const completing = !task.completed;
     Animated.parallel([
       Animated.timing(progress, {
-        toValue: task.completed ? 0 : 1, duration: 180,
+        toValue: completing ? 1 : 0, duration: 180,
         easing: Easing.out(Easing.cubic), useNativeDriver: false,
       }),
       Animated.sequence([
@@ -87,16 +89,33 @@ function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateAr
       ]),
     ]).start(({ finished }) => {
       if (!finished) { setTransitioning(false); return; }
+      // Already-done today tasks stay put when reopened; LayoutAnimation reorders the list.
       if (keepInPlace) { onToggle(); setTransitioning(false); return; }
-      Animated.timing(presence, { toValue: 0, duration: 160, easing: Easing.inOut(Easing.cubic), useNativeDriver: false }).start(({ finished: moved }) => {
+      // Completing: nudge down while fading out before jumping to Hoy bottom / Completadas.
+      Animated.parallel([
+        Animated.timing(presence, {
+          toValue: 0,
+          duration: completing ? 220 : 160,
+          easing: completing ? Easing.in(Easing.cubic) : Easing.inOut(Easing.cubic),
+          useNativeDriver: false,
+        }),
+        completing
+          ? Animated.timing(slideY, {
+              toValue: 36,
+              duration: 220,
+              easing: Easing.in(Easing.cubic),
+              useNativeDriver: false,
+            })
+          : Animated.timing(slideY, { toValue: 0, duration: 1, useNativeDriver: false }),
+      ]).start(({ finished: moved }) => {
         if (moved) onToggle();
-        else { presence.setValue(1); setTransitioning(false); }
+        else { presence.setValue(1); slideY.setValue(0); setTransitioning(false); }
       });
     });
   }
 
   return (
-    <Animated.View {...(swipeDeleteEnabled ? panResponder.panHandlers : {})} pointerEvents={transitioning ? 'none' : 'auto'} style={{ overflow: 'hidden', opacity: isDragging ? 0.92 : presence, height: rowHeight && (transitioning || entering) ? presence.interpolate({ inputRange: [0, 1], outputRange: [0, rowHeight] }) : undefined }}>
+    <Animated.View {...(swipeDeleteEnabled ? panResponder.panHandlers : {})} pointerEvents={transitioning ? 'none' : 'auto'} style={{ overflow: 'hidden', opacity: isDragging ? 0.92 : presence, height: rowHeight && (transitioning || entering) ? presence.interpolate({ inputRange: [0, 1], outputRange: [0, rowHeight] }) : undefined, transform: [{ translateY: entering ? presence.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) : slideY }] }}>
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.deleteBackground, { opacity: translateX.interpolate({ inputRange: [-72, 0], outputRange: [1, 0], extrapolate: 'clamp' }) }]}><MaterialIcons name="delete-outline" size={24} color="#fff" /></Animated.View>
     <Animated.View onLayout={(event) => { rowWidth.current = event.nativeEvent.layout.width; if (!transitioning) setRowHeight(event.nativeEvent.layout.height); }} style={[styles.row, { borderBottomColor: divider, transform: [{ translateX }] }, isDragging && styles.rowDragging, rowHeight && (transitioning || entering) ? { height: rowHeight, flexShrink: 0 } : undefined]}>
       <Pressable onPress={toggleWithAnimation} disabled={transitioning || isDragging} accessibilityRole="checkbox" accessibilityLabel={`${task.completed ? 'Marcar como pendiente' : 'Completar'}: ${task.title}`} accessibilityState={{ checked: task.completed, disabled: transitioning || isDragging }} aria-checked={task.completed} style={styles.checkTarget}>
@@ -107,7 +126,16 @@ function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateAr
         }]}><Animated.View style={{ opacity: progress }}><MaterialIcons name="check" size={16} color="#fff" /></Animated.View></Animated.View>
       </Pressable>
       <View style={styles.editArea}>
-      <Pressable onPress={() => { if (canPress() && !isDragging && !dragging.current && !deleting.current) onEdit(); }} accessibilityRole="button" accessibilityLabel={`Editar tarea: ${task.title}`} style={StyleSheet.absoluteFill} />
+      <Pressable
+        onPress={() => { if (canPress() && !isDragging && !dragging.current && !deleting.current) onEdit(); }}
+        onLongPress={onReorderLongPress ? () => { if (canPress() && !isDragging && !dragging.current && !deleting.current) onReorderLongPress(); } : undefined}
+        onPressOut={onReorderPressOut}
+        delayLongPress={420}
+        accessibilityRole="button"
+        accessibilityLabel={`Editar tarea: ${task.title}`}
+        accessibilityHint={onReorderLongPress ? 'Mantén pulsado para reordenar' : undefined}
+        style={StyleSheet.absoluteFill}
+      />
       <View style={[styles.content, compact && styles.contentCompact]} pointerEvents="box-none">
         <View style={[styles.textContent, compact && styles.textContentCompact]} pointerEvents="box-none">
         {listName && <Text pointerEvents="none" accessibilityLabel={`Lista de ${task.title}: ${listName}`} numberOfLines={1} ellipsizeMode="tail" style={styles.listName}>{listName}</Text>}
@@ -152,7 +180,7 @@ function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateAr
       </View>
       <View style={styles.titleActions}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Estrella: ${task.title}`} aria-pressed={task.starred} accessibilityState={{ selected: task.starred }} onPress={() => { if (canPress() && !isDragging && !dragging.current && !deleting.current) onStar(); }} style={styles.starTarget}><MaterialIcons name={task.starred ? 'star' : 'star-border'} size={23} color={task.starred ? color('#1a73e8') : color('#80868b')} /></Pressable>
-        {dragHandleHandlers ? <View accessibilityRole="button" accessibilityLabel={`Reordenar ${task.title}`} accessibilityHint="Mantén pulsado y arrastra para cambiar el orden" style={styles.dragHandle} {...dragHandleHandlers}><MaterialIcons name="drag-indicator" size={22} color={color('#80868b')} /></View> : null}
+        {showReorderHandle ? <View pointerEvents="none" accessible accessibilityLabel={`Reordenar ${task.title}`} style={styles.dragHandle}><MaterialIcons name="drag-indicator" size={22} color={color('#80868b')} /></View> : null}
       </View>
     </Animated.View>
     </Animated.View>
@@ -163,7 +191,8 @@ function sameTaskRow(previous: Props, next: Props) {
   // The row data and current item identity determine its actions; unrelated screen updates do not need to rebuild this animated tree.
   return previous.task === next.task && previous.listName === next.listName && previous.animateArrival === next.animateArrival &&
     previous.keepInPlace === next.keepInPlace && previous.swipeDeleteEnabled === next.swipeDeleteEnabled &&
-    previous.isDragging === next.isDragging && previous.dragHandleHandlers === next.dragHandleHandlers &&
+    previous.isDragging === next.isDragging && previous.showReorderHandle === next.showReorderHandle &&
+    previous.onReorderLongPress === next.onReorderLongPress && previous.onReorderPressOut === next.onReorderPressOut &&
     previous.dueMode === next.dueMode && previous.clockKey === next.clockKey;
 }
 

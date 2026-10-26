@@ -10,6 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppearanceProvider, useAppearance } from '@/theme/appearance';
+import { synchronizeHabitReminders } from '@/notifications/habit-reminders';
 import { synchronizeTaskReminders } from '@/notifications/task-reminders';
 import SectionTabs from '@/components/section-tabs';
 import { Platform, View } from 'react-native';
@@ -40,7 +41,7 @@ function sectionFavicon(color: string) {
 function Navigation() {
   const { preferences, background } = useAppearance();
   const { session } = useAuth();
-  const { tasks, ready } = useData();
+  const { tasks, habits, ready } = useData();
   const pathname = usePathname();
   const { day } = useLocalSearchParams<{ day?: string }>();
   const accent = sectionAccent(pathname, day, preferences);
@@ -50,6 +51,9 @@ function Navigation() {
   useEffect(() => {
     if (ready) void synchronizeTaskReminders(tasks).catch((error) => console.warn('No se pudieron actualizar los recordatorios', error));
   }, [tasks, ready]);
+  useEffect(() => {
+    if (ready) void synchronizeHabitReminders(habits).catch((error) => console.warn('No se pudieron actualizar los recordatorios de hábitos', error));
+  }, [habits, ready]);
   const owner = session?.user.id ?? 'guest';
   return <>
     {Platform.OS === 'web' && <Head>

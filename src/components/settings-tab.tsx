@@ -1,6 +1,5 @@
 import { useAuth } from '@/auth/auth-provider';
-import Pressable from '@/components/feedback-pressable';
-import NavTabFace, { NavTabIcon } from '@/components/nav-tab-face';
+import { NavTabButton, NavTabIcon } from '@/components/nav-tab-face';
 import { accentTextColor, useAppearance } from '@/theme/appearance';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
@@ -15,12 +14,19 @@ export default function SettingsTab({ active, desktop = false, inactiveColor, on
   const { preferences, border } = useAppearance();
   const selectedColor = accentTextColor(preferences.tasks, preferences.dark);
   const itemColor = active ? selectedColor : inactiveColor;
-  return <Pressable accessibilityRole="tab" accessibilityLabel="Ajustes" accessibilityState={{ selected: active }} aria-selected={active} onPress={onPress} style={desktop ? styles.desktopTab : styles.tab}>
-    <NavTabFace active={active} accent={preferences.tasks} dark={preferences.dark}>
+  return (
+    <NavTabButton
+      active={active}
+      accent={preferences.tasks}
+      dark={preferences.dark}
+      accessibilityLabel="Ajustes"
+      onPress={onPress}
+      style={desktop ? styles.desktopTab : styles.tab}
+    >
       <NavTabIcon active={active}>{photo && avatarKey !== failedAvatar ? <Image key={avatarKey} source={{ uri: photo }} style={[styles.avatar, { borderColor: border }]} resizeMode="cover" accessibilityLabel="Foto de perfil de Google" onError={() => setFailedAvatar(avatarKey)} /> : session ? <MaterialCommunityIcons name="account-circle-outline" size={24} color={itemColor} /> : <MaterialCommunityIcons name="cog-outline" size={24} color={itemColor} />}</NavTabIcon>
       <Text numberOfLines={1} style={[styles.label, { color: itemColor }]}>Ajustes</Text>
-    </NavTabFace>
-  </Pressable>;
+    </NavTabButton>
+  );
 }
 
 const styles = StyleSheet.create({

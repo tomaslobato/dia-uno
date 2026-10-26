@@ -78,6 +78,18 @@ export function habitFields(habit: Partial<Habit>): Record<string, unknown> {
   if ('intervalDays' in habit) fields.dias = habit.intervalDays;
   if ('completedDays' in habit) fields.dias_completados = habit.completedDays;
   if ('createdOn' in habit) fields.creado_el = habit.createdOn;
+  if ('symbol' in habit && habit.symbol) {
+    fields.simbolo_tipo = habit.symbol.type;
+    fields.simbolo_valor = habit.symbol.type === 'emoji' ? habit.symbol.value : habit.symbol.name;
+  }
+  if ('color' in habit) fields.color = habit.color;
+  if ('kind' in habit) fields.tipo = habit.kind;
+  if ('reminderTime' in habit) fields.recordatorio_hora = habit.reminderTime;
+  if ('goal' in habit) {
+    fields.meta_cantidad = habit.goal?.count ?? null;
+    fields.meta_periodo = habit.goal?.period ?? null;
+  }
+  if ('streakEnabled' in habit) fields.racha = habit.streakEnabled;
   return fields;
 }
 export function encodeMutation(mutation: Mutation) {
@@ -120,9 +132,29 @@ export function decodeRecords(value: unknown, owner: string): Records {
       excludedOccurrences: dayKeysFromRemote(row.ocurrencias_excluidas) ?? [],
       reminderMinutes: row.recordatorio_minutos === undefined ? 30 : row.recordatorio_minutos };
   });
-  const habitRows: Habit[] = rows.habitos.map((row) => {
+  const habitRows = rows.habitos.map((row) => {
     if (!row || row.usuario_id !== owner) throw new Error('Propietario de datos inválido');
-    return { id: row.id, name: row.nombre, description: row.descripcion, intervalDays: Number(row.dias), createdOn: row.creado_el, completedDays: row.dias_completados };
+    const symbolType = row.simbolo_tipo === 'emoji' ? 'emoji' : 'icon';
+    const symbolValue = typeof row.simbolo_valor === 'string' ? row.simbolo_valor : undefined;
+    const goalCount = row.meta_cantidad == null ? null : Number(row.meta_cantidad);
+    const goalPeriod = row.meta_periodo === 'day' || row.meta_periodo === 'week' || row.meta_periodo === 'month' ? row.meta_periodo : null;
+    const reminder = row.recordatorio_hora == null ? null : String(row.recordatorio_hora).slice(0, 5);
+    return {
+      id: row.id,
+      name: row.nombre,
+      description: row.descripcion,
+      intervalDays: Number(row.dias),
+      createdOn: row.creado_el,
+      completedDays: row.dias_completados,
+      symbol: symbolValue
+        ? (symbolType === 'emoji' ? { type: 'emoji', value: symbolValue } : { type: 'icon', name: symbolValue })
+        : undefined,
+      color: row.color,
+      kind: row.tipo,
+      reminderTime: reminder,
+      goal: goalCount && goalPeriod ? { count: goalCount, period: goalPeriod } : null,
+      streakEnabled: row.racha === undefined ? true : Boolean(row.racha),
+    };
   });
   const lists = rows.listas === undefined ? [] : parseTaskLists((rows.listas as { usuario_id: string; id: string; nombre: string; creada_en: string }[]).map((row) => {
     if (!row || row.usuario_id !== owner) throw new Error('Propietario de lista inválido');

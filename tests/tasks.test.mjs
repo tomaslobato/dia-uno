@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { staysInTaskSchedule, taskDateSection, formatDueDate, formatTaskRepeat, formatTaskDueInSection, matchesTaskDate, compareTaskDueDate, createTask, getTaskReminderAt, isOverdue, asOccurrence, isOccurrenceCompleted, nextOccurrenceDay, parseTasks, taskOccursOnDay, withOccurrenceDelete, withOccurrenceToggle } from '../src/models/task.ts';
+import { staysInTaskSchedule, taskDateSection, dateSectionDay, formatDueDate, formatTaskRepeat, formatTaskDueInSection, matchesTaskDate, compareTaskDueDate, createTask, getTaskReminderAt, isOverdue, asOccurrence, isOccurrenceCompleted, nextOccurrenceDay, parseTasks, taskOccursOnDay, withOccurrenceDelete, withOccurrenceToggle, withTaskDueDay } from '../src/models/task.ts';
 import { dayKey } from '../src/models/habit.ts';
 
 const draft = { title: '  Comprar pan  ', description: ' Integral ', dueAt: null, hasTime: false };
@@ -197,15 +197,33 @@ test('tasks can be unassigned and legacy main-list assignments become unassigned
   assert.equal(parseTasks(JSON.stringify([{ ...createTask(draft), listId: 'mis-tareas' }]))[0].listId, null);
 });
 
-test('date sections start at today and put overdue tasks under Hoy', () => {
+test('date sections keep past days separate from Hoy', () => {
   const now = new Date(2026, 9, 9, 23, 30);
   const section = (year, month, day) => taskDateSection({ ...createTask(draft), dueAt: new Date(year, month, day, 12).toISOString() }, now);
-  assert.equal(section(2026, 9, 8), 'Hoy');
+  assert.equal(section(2026, 9, 8), 'Ayer');
   assert.equal(section(2026, 9, 9), 'Hoy');
   assert.equal(section(2026, 9, 10), 'Mañana');
+  assert.match(section(2026, 9, 7), /7/);
   assert.match(section(2026, 9, 11), /11/);
   assert.equal(taskDateSection(createTask(draft), now), 'Sin fecha');
   assert.equal(taskDateSection({ ...createTask(draft), dueAt: new Date(2027, 0, 1).toISOString() }, new Date(2026, 11, 31)), 'Mañana');
+});
+
+test('dropping onto a date section resolves the target day and preserves time', () => {
+  const now = new Date(2026, 9, 9, 15, 0);
+  const timed = { ...createTask(draft), dueAt: new Date(2026, 9, 8, 9, 45).toISOString(), hasTime: true };
+  assert.equal(dateSectionDay('Hoy', [timed], now), '2026-10-09');
+  assert.equal(dateSectionDay('Ayer', [], now), '2026-10-08');
+  assert.equal(dateSectionDay('Mañana', [], now), '2026-10-10');
+  assert.equal(dateSectionDay('Sin fecha', [], now), null);
+  const labeled = { ...createTask(draft), dueAt: new Date(2026, 9, 12, 12).toISOString() };
+  assert.equal(dateSectionDay(taskDateSection(labeled, now), [labeled], now), '2026-10-12');
+  const moved = withTaskDueDay(timed, '2026-10-10');
+  assert.equal(moved.hasTime, true);
+  assert.equal(new Date(moved.dueAt).getHours(), 9);
+  assert.equal(new Date(moved.dueAt).getMinutes(), 45);
+  assert.equal(new Date(moved.dueAt).getDate(), 10);
+  assert.deepEqual(withTaskDueDay(timed, null), { dueAt: null, hasTime: false });
 });
 
 test('section due meta shows only time for today and red overdue day labels', () => {
@@ -226,7 +244,7 @@ test('completed tasks scheduled today stay above until the local day ends', () =
   assert.equal(staysInTaskSchedule(completed, now), true);
   assert.equal(staysInTaskSchedule(completed, new Date(2027, 0, 1)), false);
   assert.equal(staysInTaskSchedule({ ...completed, completed: false }, new Date(2027, 0, 1)), true);
-  assert.equal(taskDateSection({ ...completed, completed: false }, new Date(2027, 0, 1)), 'Hoy');
+  assert.equal(taskDateSection({ ...completed, completed: false }, new Date(2027, 0, 1)), 'Ayer');
   assert.equal(staysInTaskSchedule({ ...completed, hasTime: false }, now), true);
   assert.equal(staysInTaskSchedule({ ...completed, dueAt: null }, now), false);
   assert.equal(staysInTaskSchedule({ ...completed, dueAt: new Date(2027, 0, 1).toISOString() }, now), false);

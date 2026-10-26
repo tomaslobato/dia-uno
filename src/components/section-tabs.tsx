@@ -1,7 +1,6 @@
-import Pressable from '@/components/feedback-pressable';
 import { accentTextColor, useAppearance, type NavSection } from '@/theme/appearance';
 import SettingsTab from '@/components/settings-tab';
-import NavTabFace, { NavTabIcon } from '@/components/nav-tab-face';
+import { NavTabButton, NavTabIcon } from '@/components/nav-tab-face';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, usePathname } from 'expo-router';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -37,12 +36,18 @@ export default function SectionTabs() {
         ? <View style={styles.iconWrap}>{selected ? <MaterialIcons name="local-fire-department" size={25} color={textColor} /> : <Ionicons name="flame" size={24} color={inactive} />}</View>
         : <MaterialIcons name="event-note" size={24} color={selected ? textColor : inactive} />;
     return (
-      <Pressable key={section} accessibilityRole="tab" accessibilityLabel={label} aria-selected={selected} accessibilityState={{ selected }} onPress={() => navigate(section)} style={desktop ? styles.desktopTab : styles.tab}>
-        <NavTabFace active={selected} accent={accent} dark={darkBar}>
-          <NavTabIcon active={selected}>{icon}</NavTabIcon>
-          <Text style={[styles.label, { color: selected ? textColor : inactive }]}>{label}</Text>
-        </NavTabFace>
-      </Pressable>
+      <NavTabButton
+        key={section}
+        active={selected}
+        accent={accent}
+        dark={darkBar}
+        accessibilityLabel={label}
+        onPress={() => navigate(section)}
+        style={desktop ? styles.desktopTab : styles.tab}
+      >
+        <NavTabIcon active={selected}>{icon}</NavTabIcon>
+        <Text style={[styles.label, { color: selected ? textColor : inactive }]}>{label}</Text>
+      </NavTabButton>
     );
   }
   return (

@@ -417,14 +417,7 @@ function calendarDayDiff(due: Date, now: Date) {
   return day(due) - day(now);
 }
 
-export function taskDateSection(task: Task, now = new Date()): string {
-  const day = isRecurringTask(task) ? activeOccurrenceDay(task, now) : task.dueAt ? dayKey(new Date(task.dueAt)) : null;
-  if (!day) return 'Sin fecha';
-  const due = localDay(day);
-  const difference = calendarDayDiff(due, now);
-  // Overdue tasks stay under Hoy so the list always starts from today.
-  if (difference <= 0) return 'Hoy';
-  if (difference === 1) return 'Mañana';
+function datedSectionLabel(due: Date, now: Date) {
   const label = due.toLocaleDateString('es-AR', {
     weekday: 'short',
     day: 'numeric',
@@ -432,6 +425,57 @@ export function taskDateSection(task: Task, now = new Date()): string {
     ...(due.getFullYear() !== now.getFullYear() ? { year: 'numeric' as const } : {}),
   });
   return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+export function taskDateSection(task: Task, now = new Date()): string {
+  const day = isRecurringTask(task) ? activeOccurrenceDay(task, now) : task.dueAt ? dayKey(new Date(task.dueAt)) : null;
+  if (!day) return 'Sin fecha';
+  const due = localDay(day);
+  const difference = calendarDayDiff(due, now);
+  if (difference === -1) return 'Ayer';
+  if (difference < 0) return datedSectionLabel(due, now);
+  if (difference === 0) return 'Hoy';
+  if (difference === 1) return 'Mañana';
+  return datedSectionLabel(due, now);
+}
+
+/** Calendar day a date-sort section represents when dropping a task onto it. */
+export function dateSectionDay(title: string, tasks: Task[], now = new Date()): string | null {
+  if (title === 'Sin fecha') return null;
+  if (title === 'Hoy') return dayKey(now);
+  if (title === 'Ayer') return dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12));
+  if (title === 'Mañana') return dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12));
+  for (const task of tasks) {
+    const day = isRecurringTask(task) ? activeOccurrenceDay(task, now) : task.dueAt ? dayKey(new Date(task.dueAt)) : null;
+    if (day) return day;
+  }
+  return null;
+}
+
+/** Index where an empty Hoy section should sit among date groups (after past days). */
+export function hoySectionInsertIndex(sections: { title: string; tasks: Task[] }[], now = new Date()): number {
+  for (let index = 0; index < sections.length; index += 1) {
+    const section = sections[index];
+    if (section.title === 'Hoy' || section.title === 'Mañana' || section.title === 'Sin fecha') return index;
+    if (section.title === 'Ayer') continue;
+    const task = section.tasks[0];
+    if (!task) return index;
+    const day = isRecurringTask(task) ? activeOccurrenceDay(task, now) : task.dueAt ? dayKey(new Date(task.dueAt)) : null;
+    if (!day) return index;
+    if (calendarDayDiff(localDay(day), now) >= 0) return index;
+  }
+  return sections.length;
+}
+
+/** Shift a task onto `day` (or clear the date), preserving clock time when it had one. */
+export function withTaskDueDay(task: Task, day: string | null): Pick<Task, 'dueAt' | 'hasTime'> {
+  if (!day) return { dueAt: null, hasTime: false };
+  const next = localDay(day);
+  if (task.hasTime && task.dueAt) {
+    return { dueAt: withDueTime(next, new Date(task.dueAt)).toISOString(), hasTime: true };
+  }
+  next.setHours(12, 0, 0, 0);
+  return { dueAt: next.toISOString(), hasTime: false };
 }
 
 export function formatTaskDueInSection(task: Task, now = new Date()): { label: string | null; time: string | null; emphasize: boolean } {

@@ -1,8 +1,10 @@
 import Pressable from '@/components/feedback-pressable';
+import { pickTime, timePickerAnchorFromEvent } from '@/components/pick-time';
 import { useSectionStyles } from '@/theme/appearance';
 import { MaterialIcons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useMemo, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { calendarMonthDays } from '@/models/agenda';
 import { dayKey, localDay } from '@/models/habit';
@@ -33,12 +35,13 @@ type Props = {
 };
 
 export default function TaskRepeatModal({ initial, onDone, onClose }: Props) {
-  const { styles, color } = useSectionStyles(makeStyles, 'tasks');
+  const { styles, color, preferences } = useSectionStyles(makeStyles, 'tasks');
   const insets = useSafeAreaInsets();
   const [every, setEvery] = useState(String(initial.every));
   const [unit, setUnit] = useState<TaskRepeatUnit>(initial.unit);
   const [weekdays, setWeekdays] = useState<number[]>(initial.weekdays.length ? initial.weekdays : [initial.time?.getDay() ?? new Date().getDay()]);
   const [time, setTime] = useState<Date | null>(initial.time);
+  const [iosTimeOpen, setIosTimeOpen] = useState(false);
   const [endsAt, setEndsAt] = useState<Date | null>(initial.endsAt);
   const [month, setMonth] = useState(() => {
     const base = initial.endsAt ?? new Date();
@@ -58,6 +61,33 @@ export default function TaskRepeatModal({ initial, onDone, onClose }: Props) {
       }
       return [...current, day].sort((a, b) => a - b);
     });
+  }
+
+  function withDefaultTime() {
+    const next = new Date();
+    next.setHours(next.getHours() + 1, 0, 0, 0);
+    return next;
+  }
+
+  function applyPickedTime(selected: Date) {
+    const next = new Date(time ?? new Date());
+    next.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
+    setTime(next);
+  }
+
+  function openTimePicker(event?: { nativeEvent?: { clientX?: number; clientY?: number; pageX?: number; pageY?: number } }) {
+    const value = time ?? withDefaultTime();
+    if (!time) setTime(value);
+    const showInline = pickTime(value, (selected) => {
+      applyPickedTime(selected);
+      setIosTimeOpen(false);
+    }, timePickerAnchorFromEvent(event));
+    if (showInline) setIosTimeOpen(true);
+  }
+
+  function clearTime() {
+    setTime(null);
+    setIosTimeOpen(false);
   }
 
   function confirm() {
@@ -112,26 +142,36 @@ export default function TaskRepeatModal({ initial, onDone, onClose }: Props) {
             </>}
 
             <Text style={styles.label}>Hora de la repetición</Text>
-            <View style={styles.timeRow}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Sin hora de repetición" onPress={() => setTime(null)} style={[styles.chip, !time && styles.chipSelected]}>
-                <Text style={[styles.chipText, !time && styles.chipTextSelected]}>Sin hora</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Elegir hora de repetición" onPress={() => {
-                const next = time ? new Date(time) : new Date();
-                if (!time) next.setHours(9, 0, 0, 0);
-                setTime(next);
-              }} style={[styles.chip, time && styles.chipSelected]}>
-                <MaterialIcons name="schedule" size={16} color={color(time ? '#1a73e8' : '#5f6368')} />
-                <Text style={[styles.chipText, time && styles.chipTextSelected]}>{time ? time.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : 'Elegir hora'}</Text>
-              </Pressable>
-            </View>
-            {time && <View style={styles.stepper}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Menos una hora" onPress={() => setTime((current) => { const next = new Date(current ?? new Date()); next.setHours(next.getHours() - 1); return next; })} style={styles.stepperButton}><MaterialIcons name="remove" size={18} color={color('#5f6368')} /></Pressable>
-              <Text style={styles.timeValue}>{time.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Más una hora" onPress={() => setTime((current) => { const next = new Date(current ?? new Date()); next.setHours(next.getHours() + 1); return next; })} style={styles.stepperButton}><MaterialIcons name="add" size={18} color={color('#5f6368')} /></Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Menos 15 minutos" onPress={() => setTime((current) => { const next = new Date(current ?? new Date()); next.setMinutes(next.getMinutes() - 15); return next; })} style={styles.stepperButton}><Text style={styles.minuteLabel}>-15</Text></Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Más 15 minutos" onPress={() => setTime((current) => { const next = new Date(current ?? new Date()); next.setMinutes(next.getMinutes() + 15); return next; })} style={styles.stepperButton}><Text style={styles.minuteLabel}>+15</Text></Pressable>
-            </View>}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: Boolean(time) }}
+              accessibilityLabel={time ? `Cambiar hora, ${time.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}` : 'Añadir hora'}
+              onPress={(event) => openTimePicker(event)}
+              style={styles.timeAction}
+            >
+              <MaterialIcons name="schedule" size={20} color={color(time ? '#1a73e8' : '#5f6368')} />
+              <Text style={[styles.timeActionText, time && styles.timeActionTextActive]}>
+                {time ? time.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : 'Añadir hora'}
+              </Text>
+              {time && (
+                <Pressable accessibilityRole="button" accessibilityLabel="Quitar hora" onPress={clearTime} hitSlop={10} style={styles.clearTime}>
+                  <MaterialIcons name="close" size={24} color={color('#80868b')} />
+                </Pressable>
+              )}
+            </Pressable>
+            {Platform.OS === 'ios' && iosTimeOpen && time && (
+              <DateTimePicker
+                value={time}
+                mode="time"
+                display="spinner"
+                locale="es-AR"
+                themeVariant={preferences.dark ? 'dark' : 'light'}
+                is24Hour
+                onValueChange={(_event, selected) => {
+                  if (selected) applyPickedTime(selected);
+                }}
+              />
+            )}
 
             <Text style={styles.label}>Termina el</Text>
             <View style={styles.timeRow}>
@@ -209,10 +249,10 @@ const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   chipSelected: { backgroundColor: color('#e8f0fe'), borderColor: color('#e8f0fe') },
   chipText: { fontFamily: 'Manrope-Medium', fontSize: 13, color: color('#5f6368') },
   chipTextSelected: { color: color('#185abc') },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  stepperButton: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: color('#f1f4f2') },
-  timeValue: { minWidth: 64, textAlign: 'center', fontFamily: 'Manrope-SemiBold', fontSize: 16, color: color('#202124') },
-  minuteLabel: { fontFamily: 'Manrope-Medium', fontSize: 12, color: color('#5f6368') },
+  timeAction: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 8, paddingVertical: 12, borderRadius: 14 },
+  timeActionText: { flex: 1, fontFamily: 'Manrope-Medium', fontSize: 15, color: color('#3c4043') },
+  timeActionTextActive: { color: color('#185abc') },
+  clearTime: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: -6 },
   monthHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   monthArrow: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   monthTitle: { fontFamily: 'Manrope-SemiBold', fontSize: 16, color: color('#202124') },

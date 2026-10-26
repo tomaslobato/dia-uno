@@ -2,30 +2,30 @@ import Pressable from '@/components/feedback-pressable';
 import TaskScheduleModal, { type ScheduleDraft } from '@/components/task-schedule-modal';
 import { useSectionStyles } from '@/theme/appearance';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useCallback, useRef, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Animated, Easing, Keyboard, KeyboardAvoidingView, Modal, PanResponder, Platform, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { dayKey } from '@/models/habit';
 import { type TaskList } from '@/models/task-list';
-import { isOccurrenceCompleted, isRecurringTask, type Task, type TaskDeleteScope, type TaskDraft, type TaskRepeatUnit } from '@/models/task';
+import { isOccurrenceCompleted, isRecurringTask, type Task, type TaskDraft, type TaskRepeatUnit } from '@/models/task';
 
 type Props = {
   task?: Task;
-  /** Calendar day of the occurrence being edited (for recurring complete/delete). */
+  /** Calendar day of the occurrence being edited (for recurring complete). */
   occurrenceDay?: string;
   initialDate?: Date;
   lists: TaskList[];
   initialListId: string | null;
   onSave: (draft: TaskDraft, id?: string) => void;
-  onDelete: (id: string, scope?: TaskDeleteScope) => void;
   onClose: () => void;
   onToggle: (id: string) => void;
   onStar: (id: string) => void;
 };
 
-export default function TaskEditor({ task, occurrenceDay, initialDate, lists, initialListId, onSave, onDelete, onClose, onToggle }: Props) {
+export default function TaskEditor({ task, occurrenceDay, initialDate, lists, initialListId, onSave, onClose, onToggle }: Props) {
   const { styles, color } = useSectionStyles(makeStyles, 'tasks');
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const titleInput = useRef<TextInput>(null);
   const descriptionInput = useRef<TextInput>(null);
   const closing = useRef(false);
@@ -33,10 +33,11 @@ export default function TaskEditor({ task, occurrenceDay, initialDate, lists, in
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
   const [showDescription, setShowDescription] = useState(Boolean(task?.description));
+  const [expanded, setExpanded] = useState(false);
+  const [collapsedHeight, setCollapsedHeight] = useState(0);
   const [starred, setStarred] = useState(task?.starred ?? false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [listPickerOpen, setListPickerOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [date, setDate] = useState<Date | null>(() => {
     if (task) return task.dueAt ? new Date(task.dueAt) : null;
     if (initialDate) return initialDate;
@@ -54,6 +55,18 @@ export default function TaskEditor({ task, occurrenceDay, initialDate, lists, in
   const [repeatEndsAt, setRepeatEndsAt] = useState<Date | null>(() => (
     task?.repeatEndsAt ? new Date(`${task.repeatEndsAt}T12:00:00`) : null
   ));
+  const expandedRef = useRef(expanded);
+  expandedRef.current = expanded;
+  const descriptionRef = useRef(description);
+  descriptionRef.current = description;
+  const animatingRef = useRef(false);
+  const collapsedHeightRef = useRef(0);
+  const [expandProgress] = useState(() => new Animated.Value(0));
+  const [enterProgress] = useState(() => new Animated.Value(0));
+  const [heightDriven, setHeightDriven] = useState(false);
+
+  const almostFullHeight = Math.max(420, windowHeight - Math.max(insets.top, 10) - 8);
+  const sheetPaddingBottom = Math.max(insets.bottom, 12);
 
   const focusTitle = useCallback(() => {
     const run = () => {
@@ -66,6 +79,80 @@ export default function TaskEditor({ task, occurrenceDay, initialDate, lists, in
       setTimeout(run, Platform.OS === 'android' ? 500 : 160);
     });
   }, []);
+
+  const focusDescription = useCallback(() => {
+    requestAnimationFrame(() => {
+      descriptionInput.current?.focus();
+      setTimeout(() => descriptionInput.current?.focus(), Platform.OS === 'android' ? 200 : 60);
+    });
+  }, []);
+
+  const expandComposer = useCallback(() => {
+    if (animatingRef.current || expandedRef.current) return;
+    const from = collapsedHeightRef.current || collapsedHeight || 200;
+    collapsedHeightRef.current = from;
+    setCollapsedHeight(from);
+    setHeightDriven(true);
+    setShowDescription(true);
+    setExpanded(true);
+    expandProgress.setValue(0);
+    animatingRef.current = true;
+    Animated.timing(expandProgress, {
+      toValue: 1,
+      duration: 340,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      animatingRef.current = false;
+      if (finished) focusDescription();
+    });
+  }, [collapsedHeight, expandProgress, focusDescription]);
+
+  const collapseComposer = useCallback(() => {
+    if (animatingRef.current || !expandedRef.current) return;
+    Keyboard.dismiss();
+    animatingRef.current = true;
+    Animated.timing(expandProgress, {
+      toValue: 0,
+      duration: 300,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      animatingRef.current = false;
+      if (!finished) return;
+      setExpanded(false);
+      if (!descriptionRef.current.trim()) {
+        setShowDescription(false);
+        setHeightDriven(false);
+        setCollapsedHeight(0);
+        collapsedHeightRef.current = 0;
+      }
+      focusTitle();
+    });
+  }, [expandProgress, focusTitle]);
+
+  function toggleDescription() {
+    if (expanded) collapseComposer();
+    else expandComposer();
+  }
+
+  const expandComposerRef = useRef(expandComposer);
+  expandComposerRef.current = expandComposer;
+  const collapseComposerRef = useRef(collapseComposer);
+  collapseComposerRef.current = collapseComposer;
+
+  const handlePan = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onPanResponderRelease: (_, gesture) => {
+      if (gesture.dy < -36 || gesture.vy < -0.45) {
+        if (!expandedRef.current) expandComposerRef.current();
+        return;
+      }
+      if (gesture.dy > 36 || gesture.vy > 0.45) {
+        if (expandedRef.current) collapseComposerRef.current();
+      }
+    },
+  }), []);
 
   function finish() {
     if (closing.current) return;
@@ -91,23 +178,24 @@ export default function TaskEditor({ task, occurrenceDay, initialDate, lists, in
     }, task?.id);
     closing.current = true;
     Keyboard.dismiss();
-    onClose();
+    Animated.timing(enterProgress, {
+      toValue: 0,
+      duration: 180,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => onClose());
   }
 
   function cancel() {
     if (closing.current) return;
-    if (confirmDelete) {
-      setConfirmDelete(false);
-      return;
-    }
     closing.current = true;
     Keyboard.dismiss();
-    onClose();
-  }
-
-  function openDescription() {
-    setShowDescription(true);
-    requestAnimationFrame(() => descriptionInput.current?.focus());
+    Animated.timing(enterProgress, {
+      toValue: 0,
+      duration: 180,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => onClose());
   }
 
   function applySchedule(draft: ScheduleDraft) {
@@ -120,25 +208,6 @@ export default function TaskEditor({ task, occurrenceDay, initialDate, lists, in
     setRepeatEndsAt(draft.repeatEndsAt);
     setScheduleOpen(false);
     focusTitle();
-  }
-
-  function requestDelete() {
-    if (!task || closing.current) return;
-    Keyboard.dismiss();
-    if (isRecurringTask(task)) {
-      setConfirmDelete(true);
-      return;
-    }
-    closing.current = true;
-    onDelete(task.id, 'all');
-    onClose();
-  }
-
-  function confirmDeleteScope(scope: TaskDeleteScope) {
-    if (!task || closing.current) return;
-    closing.current = true;
-    onDelete(task.id, scope);
-    onClose();
   }
 
   const scheduleActive = Boolean(date);
@@ -167,39 +236,77 @@ export default function TaskEditor({ task, occurrenceDay, initialDate, lists, in
     closing.current = true;
     Keyboard.dismiss();
     onToggle(task.id);
-    onClose();
+    Animated.timing(enterProgress, {
+      toValue: 0,
+      duration: 180,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => onClose());
   }
 
+  const measuredCollapsed = Math.max(collapsedHeight || collapsedHeightRef.current, 160);
+  const animatedHeight = expandProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [measuredCollapsed, almostFullHeight],
+  });
+
   return (
-    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={cancel} onShow={focusTitle}>
-      <KeyboardAvoidingView style={[styles.overlay, confirmDelete && styles.confirmationOverlay]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
-        <Pressable feedback={false} style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel={confirmDelete ? 'Cerrar sin eliminar' : 'Cerrar sin guardar'} onPress={cancel} />
-        {confirmDelete && task ? (
-          <View style={styles.confirmation} accessibilityViewIsModal>
-            <Text accessibilityRole="header" style={styles.confirmationTitle}>Eliminar tarea recurrente</Text>
-            <Text style={styles.confirmationMessage}>
-              {occurrenceDay
-                ? `¿Qué quieres eliminar de “${title || task.title}”?`
-                : `¿Qué quieres eliminar de “${title || task.title}”?`}
-            </Text>
-            <View style={styles.confirmationChoices}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Eliminar solo esta ocurrencia" onPress={() => confirmDeleteScope('this')} style={styles.choiceButton}>
-                <Text style={styles.choiceText}>Solo esta</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Eliminar esta y las siguientes" onPress={() => confirmDeleteScope('future')} style={styles.choiceButton}>
-                <Text style={styles.choiceText}>Esta y las siguientes</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Eliminar toda la serie" onPress={() => confirmDeleteScope('all')} style={styles.choiceButton}>
-                <Text style={styles.choiceDanger}>Todas</Text>
-              </Pressable>
+    <Modal
+      visible
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={cancel}
+      onShow={() => {
+        enterProgress.setValue(0);
+        Animated.timing(enterProgress, {
+          toValue: 1,
+          duration: 280,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start(({ finished }) => {
+          if (finished) focusTitle();
+        });
+      }}
+    >
+      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
+        <Pressable feedback={false} style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="Cerrar sin guardar" onPress={cancel} />
+        <Animated.View
+          style={{
+            width: '100%',
+            maxWidth: 600,
+            alignSelf: 'center',
+            opacity: enterProgress,
+            transform: [{
+              translateY: enterProgress.interpolate({ inputRange: [0, 1], outputRange: [56, 0] }),
+            }],
+          }}
+        >
+          <Animated.View
+            style={[
+              styles.sheet,
+              { paddingBottom: sheetPaddingBottom },
+              heightDriven ? { height: animatedHeight } : null,
+            ]}
+            accessibilityViewIsModal
+            onLayout={(event) => {
+              if (expandedRef.current || animatingRef.current) return;
+              const height = Math.round(event.nativeEvent.layout.height);
+              if (height < 100) return;
+              collapsedHeightRef.current = height;
+              if (Math.abs(height - collapsedHeight) > 2) setCollapsedHeight(height);
+            }}
+          >
+            <View
+              {...handlePan.panHandlers}
+              accessible
+              accessibilityRole="adjustable"
+              accessibilityLabel="Redimensionar editor"
+              accessibilityHint={expanded ? 'Desliza hacia abajo para el modo compacto' : 'Desliza hacia arriba para escribir una nota'}
+              style={styles.handleHit}
+            >
+              <View style={styles.handle} />
             </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Cancelar" onPress={() => setConfirmDelete(false)} style={styles.confirmationCancel}>
-              <Text style={styles.finishText}>Cancelar</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) }]} accessibilityViewIsModal>
-            <View style={styles.handle} />
             <View style={styles.titleRow}>
               {task ? (
                 <Pressable
@@ -237,7 +344,7 @@ export default function TaskEditor({ task, occurrenceDay, initialDate, lists, in
                 onChangeText={setDescription}
                 placeholder="Añadir detalles"
                 placeholderTextColor={color('#80868b')}
-                style={styles.description}
+                style={[styles.description, expanded && styles.descriptionExpanded]}
                 accessibilityLabel="Descripción de la tarea"
                 multiline
                 maxLength={4000}
@@ -252,8 +359,15 @@ export default function TaskEditor({ task, occurrenceDay, initialDate, lists, in
             )}
             <View style={styles.toolbar}>
               <View style={styles.tools}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Descripción" accessibilityState={{ selected: showDescription }} onPress={openDescription} style={[styles.tool, showDescription && styles.toolActive]}>
-                  <MaterialIcons name="notes" size={22} color={color(showDescription || description ? '#1a73e8' : '#5f6368')} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Descripción"
+                  accessibilityState={{ selected: expanded || showDescription }}
+                  accessibilityHint={expanded ? 'Volver al modo compacto' : 'Abrir nota a pantalla casi completa'}
+                  onPress={toggleDescription}
+                  style={[styles.tool, (expanded || showDescription || description) && styles.toolActive]}
+                >
+                  <MaterialIcons name="notes" size={22} color={color(expanded || showDescription || description ? '#1a73e8' : '#5f6368')} />
                 </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel="Fecha y hora" accessibilityState={{ selected: scheduleActive }} onPress={() => { Keyboard.dismiss(); setScheduleOpen(true); }} style={[styles.tool, scheduleActive && styles.toolActive]}>
                   <MaterialIcons name="schedule" size={22} color={color(scheduleActive ? '#1a73e8' : '#5f6368')} />
@@ -270,16 +384,13 @@ export default function TaskEditor({ task, occurrenceDay, initialDate, lists, in
                 <Pressable accessibilityRole="button" accessibilityLabel="Importante" accessibilityState={{ selected: starred }} onPress={() => setStarred((current) => !current)} style={[styles.tool, starred && styles.toolActive]}>
                   <MaterialIcons name={starred ? 'star' : 'star-border'} size={22} color={color(starred ? '#1a73e8' : '#5f6368')} />
                 </Pressable>
-                {task && <Pressable accessibilityRole="button" accessibilityLabel="Eliminar tarea" onPress={requestDelete} style={styles.tool}>
-                  <MaterialIcons name="delete-outline" size={22} color={color('#b3261e')} />
-                </Pressable>}
               </View>
               <Pressable accessibilityRole="button" accessibilityLabel="Guardar" onPress={finish} style={[styles.save, !title.trim() && styles.saveDisabled]} disabled={!title.trim()}>
                 <Text style={styles.saveText}>Guardar</Text>
               </Pressable>
             </View>
-          </View>
-        )}
+          </Animated.View>
+        </Animated.View>
       </KeyboardAvoidingView>
       {scheduleOpen && <TaskScheduleModal
         initial={{
@@ -342,28 +453,20 @@ export default function TaskEditor({ task, occurrenceDay, initialDate, lists, in
 
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   overlay: { flex: 1, backgroundColor: color('#20212466'), justifyContent: 'flex-end' },
-  confirmationOverlay: { justifyContent: 'center', paddingHorizontal: 24 },
-  confirmation: { width: '100%', maxWidth: 420, alignSelf: 'center', backgroundColor: color('#fff'), borderRadius: 24, padding: 24, gap: 12 },
-  confirmationTitle: { fontFamily: 'Manrope-SemiBold', fontSize: 20, color: color('#202124') },
-  confirmationMessage: { fontFamily: 'Manrope-Regular', fontSize: 14, lineHeight: 21, color: color('#5f6368') },
-  confirmationChoices: { gap: 4, marginTop: 4 },
-  choiceButton: { paddingVertical: 14, paddingHorizontal: 4, borderRadius: 12 },
-  choiceText: { fontFamily: 'Manrope-SemiBold', fontSize: 16, color: color('#1a73e8') },
-  choiceDanger: { fontFamily: 'Manrope-SemiBold', fontSize: 16, color: color('#b3261e') },
-  confirmationCancel: { alignSelf: 'flex-end', paddingHorizontal: 14, paddingVertical: 12 },
-  finishText: { fontFamily: 'Manrope-SemiBold', fontSize: 16, color: color('#5f6368') },
-  sheet: { width: '100%', maxWidth: 600, alignSelf: 'center', backgroundColor: color('#fff'), borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 18, paddingTop: 10, gap: 10, boxShadow: '0px -4px 30px rgba(32,33,36,0.08)' },
-  handle: { width: 34, height: 4, borderRadius: 2, backgroundColor: color('#dadce0'), alignSelf: 'center', marginBottom: 8 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sheet: { width: '100%', backgroundColor: color('#fff'), borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 18, paddingTop: 4, gap: 10, overflow: 'hidden', boxShadow: '0px -4px 30px rgba(32,33,36,0.08)' },
+  handleHit: { alignItems: 'center', justifyContent: 'center', paddingVertical: 10, marginBottom: 2 },
+  handle: { width: 40, height: 5, borderRadius: 3, backgroundColor: color('#dadce0') },
+  titleRow: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
   checkTarget: { width: 36, height: 40, alignItems: 'center', justifyContent: 'center' },
   checkbox: { width: 22, height: 22, borderWidth: 1.7, borderColor: color('#a8b1be'), borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: color('#fff') },
   checkboxDone: { backgroundColor: color('#1a73e8'), borderColor: color('#1a73e8') },
   title: { flex: 1, minWidth: 0, fontFamily: 'Manrope-Medium', fontSize: 20, lineHeight: 28, color: color('#202124'), paddingVertical: 6, paddingHorizontal: 2, minHeight: 40 },
   titleCompleted: { color: color('#8b919b'), textDecorationLine: 'line-through' },
   description: { fontFamily: 'Manrope-Regular', fontSize: 15, lineHeight: 22, color: color('#5f6368'), minHeight: 72, maxHeight: 140, paddingHorizontal: 2, paddingVertical: 4 },
-  scheduleHint: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 2 },
+  descriptionExpanded: { flex: 1, minHeight: 160, maxHeight: 10000, fontSize: 16, lineHeight: 24 },
+  scheduleHint: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 2 },
   scheduleHintText: { fontFamily: 'Manrope-Medium', fontSize: 12, color: color('#1a73e8') },
-  toolbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 4, paddingBottom: 4 },
+  toolbar: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 4, paddingBottom: 4 },
   tools: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
   tool: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   toolActive: { backgroundColor: color('#e8f0fe') },

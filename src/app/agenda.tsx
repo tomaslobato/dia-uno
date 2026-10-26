@@ -31,7 +31,7 @@ export default function AgendaScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const { tasks, lists, ready, error, saveTask, toggleTask, toggleStar, deleteTask } = useTasks();
   const { habits, updateHabit, toggleDay, deleteHabit } = useHabits();
-  const { removedId, removeTask, undoDelete } = useTaskDeletion(deleteTask);
+  const { removedId, undoDelete } = useTaskDeletion(deleteTask);
   const visibleTasks = useMemo(() => tasks.filter((task) => task.id !== removedId), [tasks, removedId]);
   const listNames = useMemo(() => new Map(lists.map((list) => [list.id, list.name])), [lists]);
   const [editing, setEditing] = useState<{ id: string; day: string } | null>(null);
@@ -318,8 +318,8 @@ export default function AgendaScreen() {
           </Pressable>
         </View>
       </View>
-      {(editingTask || creatingOn) && <TaskEditor key={editingTask ? `${editingTask.id}@${editing!.day}` : `new-agenda-task-${creatingOn}`} task={editingTask} occurrenceDay={editing?.day} initialDate={!editingTask && creatingOn ? localDay(creatingOn) : undefined} lists={lists} initialListId={editingTask?.listId ?? null} onSave={saveTask} onToggle={(id) => toggleTask(id, editing?.day)} onStar={toggleStar} onDelete={(id, scope) => removeTask(id, { scope, day: editing?.day })} onClose={() => { setEditing(null); setCreatingOn(null); }} />}
-      {editingHabit && <HabitModal key={editingHabit.id} habit={editingHabit} today={today} onClose={() => setEditingHabitId(null)} onSave={(name, interval, description) => updateHabit(editingHabit.id, name, interval, description)} onToggle={(day) => toggleDay(editingHabit.id, day)} onDelete={() => deleteHabit(editingHabit.id)} />}
+      {(editingTask || creatingOn) && <TaskEditor key={editingTask ? `${editingTask.id}@${editing!.day}` : `new-agenda-task-${creatingOn}`} task={editingTask} occurrenceDay={editing?.day} initialDate={!editingTask && creatingOn ? localDay(creatingOn) : undefined} lists={lists} initialListId={editingTask?.listId ?? null} onSave={saveTask} onToggle={(id) => toggleTask(id, editing?.day)} onStar={toggleStar} onClose={() => { setEditing(null); setCreatingOn(null); }} />}
+      {editingHabit && <HabitModal key={editingHabit.id} habit={editingHabit} today={today} onClose={() => setEditingHabitId(null)} onSave={(draft) => updateHabit(editingHabit.id, draft)} onToggle={(day) => toggleDay(editingHabit.id, day)} onDelete={() => deleteHabit(editingHabit.id)} />}
       <WeekScrollHint active={detailed && !fixedWeek} />
     </SafeAreaView>
   );

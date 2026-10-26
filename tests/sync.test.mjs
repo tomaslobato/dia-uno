@@ -2,12 +2,23 @@ import { createTaskList } from '../src/models/task-list.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createTask } from '../src/models/task.ts';
+import { DEFAULT_HABIT_COLOR } from '../src/constants/habit-colors.ts';
+import { DEFAULT_HABIT_ICON } from '../src/constants/habit-icons.ts';
 import { createHabit, parseHabits } from '../src/models/habit.ts';
 import { applyMutation, decodeRecords, encodeMutation, projectRecords } from '../src/data/records.ts';
 import { SyncStore, cacheKey, parseCache } from '../src/data/sync-store.ts';
 
 const empty = () => ({ tasks: [], habits: [], lists: [] });
 const task = () => createTask({ title: 'Leer', description: 'Diez páginas', dueAt: null, hasTime: false });
+const habit = (name = 'Caminar', intervalDays = 2, description = '') => createHabit({
+  name, description, intervalDays,
+  symbol: { type: 'icon', name: DEFAULT_HABIT_ICON },
+  color: DEFAULT_HABIT_COLOR,
+  kind: 'build',
+  reminderTime: null,
+  goal: null,
+  streakEnabled: true,
+});
 const mutation = (item, entity = 'tasks', mutationId = 'm1') => ({ entity, item, id: item.id, action: 'create', mutationId });
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 const copy = (value) => structuredClone(value);
@@ -60,13 +71,16 @@ test('task reminder lead time syncs to Supabase and nullable lead time disables 
   assert.equal(decodeRecords({ tareas: [{ ...legacy, id: t.id, usuario_id: owner }], habitos: [] }, owner).tasks[0].reminderMinutes, 30);
 });
 test('old habits gain an empty description and full habits retain history and frequency', () => {
-  const h = createHabit('Caminar', 3, new Date(), 'En el parque');
+  const h = habit('Caminar', 3, 'En el parque');
   const { description, ...legacy } = h;
   assert.equal(parseHabits(JSON.stringify([legacy]))[0].description, '');
   const fields = encodeMutation(mutation({ ...h, completedDays: ['2026-10-08', '2026-10-10'] }, 'habits')).campos;
   const decoded = decodeRecords({ tareas: [], habitos: [{ ...fields, id: h.id, usuario_id: 'a' }] }, 'a').habits[0];
   assert.equal(decoded.description, 'En el parque'); assert.equal(decoded.intervalDays, 3);
   assert.deepEqual(decoded.completedDays, ['2026-10-08', '2026-10-10']);
+  assert.equal(decoded.color, DEFAULT_HABIT_COLOR);
+  assert.equal(decoded.kind, 'build');
+  assert.deepEqual(decoded.symbol, { type: 'icon', name: DEFAULT_HABIT_ICON });
 });
 test('offline changes survive restart, then sync once without duplicate records', async () => {
   const storage = memory(); const remote = server(); remote.setOnline(false);
@@ -98,7 +112,7 @@ test('pending edits during a network request remain visible and are sent afterwa
   assert.equal(remote.data.tasks[0].description, 'Mientras sincroniza'); assert.equal(store.getSnapshot().pending, 0); store.stop();
 });
 test('accounts and guest data are separated and original local records migrate only once', async () => {
-  const t = task(); const h = createHabit('Caminar', 2);
+  const t = task(); const h = habit('Caminar', 2);
   const storage = memory({ 'tareas.tasks.v1': JSON.stringify([t]), 'tareas.habits.v1': JSON.stringify([h]) });
   const guest = new SyncStore(null, storage, null); await guest.start(); assert.equal(guest.getSnapshot().tasks.length, 1); guest.stop();
   const aRemote = server(); const a = new SyncStore('a', storage, aRemote); await a.start();
@@ -192,7 +206,7 @@ test('list wire fields and default assignments preserve ownership and legacy rec
 });
 
 test('recovers a list misfiled as a habit by a pre-update live store without losing real habits', async () => {
-  const list = createTaskList('Trabajo'); const h = createHabit('Caminar', 2);
+  const list = createTaskList('Trabajo'); const h = habit('Caminar', 2);
   const t = task();
   const raw = JSON.stringify({ version: 1, owner: null, base: { tasks: [t], habits: [h, list] }, pending: [], legacyImported: true });
   const storage = memory({ [cacheKey(null)]: raw });

@@ -1,5 +1,5 @@
 import Pressable from '@/components/feedback-pressable';
-import { pickTime } from '@/components/pick-time';
+import { pickTime, timePickerAnchorFromEvent } from '@/components/pick-time';
 import TaskRepeatModal, { type RepeatDraft } from '@/components/task-repeat-modal';
 import { useSectionStyles } from '@/theme/appearance';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -73,7 +73,7 @@ export default function TaskScheduleModal({ initial, onDone, onClose }: Props) {
     setHasTime(true);
   }
 
-  function openTimePicker() {
+  function openTimePicker(event?: { nativeEvent?: { clientX?: number; clientY?: number; pageX?: number; pageY?: number } }) {
     const value = date && hasTime ? date : withDefaultTime(date ?? new Date());
     if (!(date && hasTime)) {
       setDate(value);
@@ -82,7 +82,7 @@ export default function TaskScheduleModal({ initial, onDone, onClose }: Props) {
     const showInline = pickTime(value, (selected) => {
       applyPickedTime(selected);
       setIosTimeOpen(false);
-    });
+    }, timePickerAnchorFromEvent(event));
     if (showInline) setIosTimeOpen(true);
   }
 
@@ -94,16 +94,6 @@ export default function TaskScheduleModal({ initial, onDone, onClose }: Props) {
     }
     setHasTime(false);
     setIosTimeOpen(false);
-  }
-
-  function nudgeTime(minutes: number) {
-    setDate((current) => {
-      if (!current) return current;
-      const next = new Date(current);
-      next.setMinutes(next.getMinutes() + minutes);
-      return next;
-    });
-    setHasTime(true);
   }
 
   function confirm() {
@@ -185,14 +175,14 @@ export default function TaskScheduleModal({ initial, onDone, onClose }: Props) {
             <Text style={styles.rowText}>Sin fecha</Text>
           </Pressable>
 
-          <Pressable accessibilityRole="button" accessibilityState={{ selected: hasTime }} accessibilityLabel={hasTime && date ? `Cambiar hora, ${date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}` : 'Añadir hora'} onPress={openTimePicker} style={styles.row}>
+          <Pressable accessibilityRole="button" accessibilityState={{ selected: hasTime }} accessibilityLabel={hasTime && date ? `Cambiar hora, ${date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}` : 'Añadir hora'} onPress={(event) => openTimePicker(event)} style={styles.row}>
             <MaterialIcons name="schedule" size={20} color={color(hasTime ? '#1a73e8' : '#5f6368')} />
             <Text style={[styles.rowText, hasTime && styles.rowTextActive]}>{hasTime && date ? date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : 'Añadir hora'}</Text>
-            {hasTime && date && <View style={styles.timeAdjust}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Menos 15 minutos" onPress={() => nudgeTime(-15)} hitSlop={6}><MaterialIcons name="remove" size={18} color={color('#1a73e8')} /></Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Más 15 minutos" onPress={() => nudgeTime(15)} hitSlop={6}><MaterialIcons name="add" size={18} color={color('#1a73e8')} /></Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Quitar hora" onPress={clearTime} hitSlop={8}><MaterialIcons name="close" size={18} color={color('#80868b')} /></Pressable>
-            </View>}
+            {hasTime && date && (
+              <Pressable accessibilityRole="button" accessibilityLabel="Quitar hora" onPress={clearTime} hitSlop={10} style={styles.clearTime}>
+                <MaterialIcons name="close" size={24} color={color('#80868b')} />
+              </Pressable>
+            )}
           </Pressable>
           {Platform.OS === 'ios' && iosTimeOpen && date && (
             <DateTimePicker
@@ -263,5 +253,5 @@ const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   rowDisabled: { opacity: 0.45 },
   rowText: { flex: 1, fontFamily: 'Manrope-Medium', fontSize: 15, color: color('#3c4043') },
   rowTextActive: { color: color('#185abc') },
-  timeAdjust: { flexDirection: 'row', gap: 10 },
+  clearTime: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: -6 },
 });
