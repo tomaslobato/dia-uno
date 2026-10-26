@@ -13,7 +13,7 @@
     "android": {
       "permissions": ["SCHEDULE_EXACT_ALARM"],
       "adaptiveIcon": {
-        "backgroundColor": "#00000000",
+        "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/branding/foreground.png",
         "monochromeImage": "./assets/branding/foreground.png"
       },

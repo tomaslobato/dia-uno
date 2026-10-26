@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 1024 1024">
+  <!-- Habit day shape (radius = side / 3). Black in light UI, white in dark UI. -->
+  <style>
+    .mark { fill: #000000; }
+    @media (prefers-color-scheme: dark) {
+      .mark { fill: #ffffff; }
+    }
+  </style>
+  <rect class="mark" x="302" y="302" width="420" height="420" rx="140" ry="140"/>
+</svg>

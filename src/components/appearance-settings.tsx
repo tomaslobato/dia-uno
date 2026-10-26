@@ -2,7 +2,7 @@ import Pressable from '@/components/feedback-pressable';
 import { colorChoices, useAppearance, type NavSection } from '@/theme/appearance';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PanResponder, StyleSheet, Text, View } from 'react-native';
+import { Animated, PanResponder, StyleSheet, Text, View } from 'react-native';
 
 const navLabels: Record<NavSection, string> = {
   tasks: 'Tareas',
@@ -20,16 +20,28 @@ function moveItem<T>(list: T[], from: number, to: number) {
   return next;
 }
 
+function siblingShift(index: number, from: number, hover: number) {
+  if (from < hover && index > from && index <= hover) return -ROW_HEIGHT;
+  if (from > hover && index >= hover && index < from) return ROW_HEIGHT;
+  return 0;
+}
+
 export default function AppearanceSettings() {
   const { preferences, themeMode, setThemeMode, setShowGreetings, setNavOrder, update, ready, error, text, muted, border, surface } = useAppearance();
   const [order, setOrder] = useState(preferences.navOrder);
   const [dragging, setDragging] = useState<NavSection | null>(null);
-  const [shiftY, setShiftY] = useState(0);
+  const [hoverIndex, setHoverIndex] = useState(0);
   const orderRef = useRef(order);
   const draggingRef = useRef<NavSection | null>(null);
-  const startIndex = useRef(0);
-  const currentIndex = useRef(0);
+  const fromIndex = useRef(0);
+  const hoverRef = useRef(0);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragY = useRef(new Animated.Value(0)).current;
+  const slotY = useRef<Partial<Record<NavSection, Animated.Value>>>({});
+
+  for (const section of order) {
+    if (!slotY.current[section]) slotY.current[section] = new Animated.Value(0);
+  }
 
   useEffect(() => {
     if (dragging) return;
@@ -40,6 +52,21 @@ export default function AppearanceSettings() {
   useEffect(() => { draggingRef.current = dragging; }, [dragging]);
   useEffect(() => () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); }, []);
 
+  useEffect(() => {
+    if (!dragging) {
+      for (const section of order) slotY.current[section]?.setValue(0);
+      return;
+    }
+    const from = fromIndex.current;
+    const animations = order.flatMap((section, index) => {
+      if (section === dragging) return [];
+      const anim = slotY.current[section];
+      if (!anim) return [];
+      return [Animated.spring(anim, { toValue: siblingShift(index, from, hoverIndex), speed: 48, bounciness: 0, useNativeDriver: false })];
+    });
+    if (animations.length) Animated.parallel(animations).start();
+  }, [dragging, hoverIndex, order]);
+
   function clearLongPress() {
     if (!longPressTimer.current) return;
     clearTimeout(longPressTimer.current);
@@ -47,34 +74,36 @@ export default function AppearanceSettings() {
   }
 
   function beginDrag(section: NavSection) {
+    if (draggingRef.current) return;
     const index = orderRef.current.indexOf(section);
     if (index < 0) return;
-    startIndex.current = index;
-    currentIndex.current = index;
+    fromIndex.current = index;
+    hoverRef.current = index;
+    dragY.setValue(0);
+    setHoverIndex(index);
     setDragging(section);
-    setShiftY(0);
   }
 
   function finishDrag(commit: boolean) {
     clearLongPress();
-    if (draggingRef.current && commit) setNavOrder(orderRef.current);
+    const section = draggingRef.current;
+    if (!section) return;
+    const next = commit ? moveItem(orderRef.current, fromIndex.current, hoverRef.current) : preferences.navOrder;
+    orderRef.current = next;
+    setOrder(next);
+    if (commit && fromIndex.current !== hoverRef.current) setNavOrder(next);
+    dragY.setValue(0);
     setDragging(null);
-    setShiftY(0);
-    if (!commit) setOrder(preferences.navOrder);
+    setHoverIndex(0);
   }
 
   function applyMove(dy: number) {
-    const section = draggingRef.current;
-    if (!section) return;
-    setShiftY(dy);
-    const target = Math.max(0, Math.min(orderRef.current.length - 1, startIndex.current + Math.round(dy / ROW_HEIGHT)));
-    if (target === currentIndex.current) return;
-    const next = moveItem(orderRef.current, currentIndex.current, target);
-    currentIndex.current = target;
-    orderRef.current = next;
-    setOrder(next);
-    setShiftY(dy - (target - startIndex.current) * ROW_HEIGHT);
-    startIndex.current = target;
+    if (!draggingRef.current) return;
+    dragY.setValue(dy);
+    const target = Math.max(0, Math.min(orderRef.current.length - 1, fromIndex.current + Math.round(dy / ROW_HEIGHT)));
+    if (target === hoverRef.current) return;
+    hoverRef.current = target;
+    setHoverIndex(target);
   }
 
   const handlePan = useMemo(() => {
@@ -86,11 +115,11 @@ export default function AppearanceSettings() {
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
           clearLongPress();
-          longPressTimer.current = setTimeout(() => beginDrag(section), 140);
+          longPressTimer.current = setTimeout(() => beginDrag(section), 120);
         },
         onPanResponderMove: (_, gesture) => {
           if (!draggingRef.current) {
-            if (Math.abs(gesture.dy) > 6) {
+            if (Math.abs(gesture.dy) > 4) {
               clearLongPress();
               beginDrag(section);
             } else return;
@@ -123,16 +152,18 @@ export default function AppearanceSettings() {
     <View style={styles.group}>
       <Text style={[styles.label, { color: muted }]}>Orden del menú</Text>
       <Text style={[styles.toggleHint, { color: muted }]}>Mantén y arrastra para reordenar. Ajustes queda al final.</Text>
-      <View style={[styles.navList, { borderColor: border, backgroundColor: surface }]}>
+      <View style={[styles.navList, { borderColor: border, backgroundColor: surface }, dragging && styles.navListDragging]}>
         {order.map((section, index) => {
           const isDragging = dragging === section;
           return (
-            <View
+            <Animated.View
               key={section}
               style={[
                 styles.navRow,
                 index > 0 && !isDragging && { borderTopColor: border, borderTopWidth: StyleSheet.hairlineWidth },
-                isDragging && [styles.navRowDragging, { backgroundColor: surface, borderColor: border, transform: [{ translateY: shiftY }] }],
+                isDragging
+                  ? [styles.navRowDragging, { backgroundColor: surface, borderColor: border, transform: [{ translateY: dragY }, { scale: 1.02 }], zIndex: 2 }]
+                  : { transform: [{ translateY: slotY.current[section] ?? 0 }] },
               ]}
               {...(handlePan[section]?.panHandlers ?? {})}
               accessibilityRole="adjustable"
@@ -141,7 +172,7 @@ export default function AppearanceSettings() {
               <View style={[styles.navDot, { backgroundColor: preferences[section] }]} />
               <Text style={[styles.navLabel, { color: text }]}>{navLabels[section]}</Text>
               <MaterialIcons name="drag-indicator" size={22} color={muted} />
-            </View>
+            </Animated.View>
           );
         })}
       </View>
@@ -163,6 +194,7 @@ const styles = StyleSheet.create({
   switchThumbOn: { alignSelf: 'flex-end' },
   group: { gap: 12, marginTop: 8 },
   navList: { borderWidth: 1, borderRadius: 16, overflow: 'hidden' },
+  navListDragging: { overflow: 'visible' },
   navRow: { flexDirection: 'row', alignItems: 'center', gap: 10, height: ROW_HEIGHT, paddingLeft: 14, paddingRight: 12 },
   navRowDragging: { zIndex: 2, elevation: 4, borderWidth: 1, borderRadius: 14, marginHorizontal: -1 },
   navDot: { width: 10, height: 10, borderRadius: 5 },

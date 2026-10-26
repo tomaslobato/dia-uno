@@ -1,5 +1,5 @@
 import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutChangeEvent, PanResponder, View } from 'react-native';
+import { Animated, LayoutChangeEvent, PanResponder, View } from 'react-native';
 import type { Task } from '@/models/task';
 
 type Props = {
@@ -7,8 +7,10 @@ type Props = {
   enabled: boolean;
   onReorder: (ids: string[]) => void;
   onDraggingChange?: (dragging: boolean) => void;
-  renderItem: (task: Task, index: number, last: boolean, drag: { isDragging: boolean; handleHandlers: object }) => ReactElement;
+  renderItem: (task: Task, index: number, drag: { isDragging: boolean; handleHandlers: object }) => ReactElement;
 };
+
+const FALLBACK_HEIGHT = 64;
 
 function moveId(list: string[], from: number, to: number) {
   if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return list;
@@ -18,18 +20,51 @@ function moveId(list: string[], from: number, to: number) {
   return next;
 }
 
+function hoverIndexFromDy(from: number, dy: number, ids: string[], heights: Record<string, number>) {
+  let index = from;
+  let remaining = dy;
+  if (remaining >= 0) {
+    while (index < ids.length - 1) {
+      const step = heights[ids[index + 1]] || FALLBACK_HEIGHT;
+      if (remaining < step * 0.55) break;
+      remaining -= step;
+      index += 1;
+    }
+  } else {
+    while (index > 0) {
+      const step = heights[ids[index - 1]] || FALLBACK_HEIGHT;
+      if (-remaining < step * 0.55) break;
+      remaining += step;
+      index -= 1;
+    }
+  }
+  return index;
+}
+
+function siblingShift(index: number, from: number, hover: number, dragHeight: number) {
+  if (from < hover && index > from && index <= hover) return -dragHeight;
+  if (from > hover && index >= hover && index < from) return dragHeight;
+  return 0;
+}
+
 export default function DraggableTaskList({ tasks, enabled, onReorder, onDraggingChange, renderItem }: Props) {
   const [ids, setIds] = useState(() => tasks.map((task) => task.id));
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [shiftY, setShiftY] = useState(0);
+  const [hoverIndex, setHoverIndex] = useState(0);
   const heights = useRef<Record<string, number>>({});
-  const startIndex = useRef(0);
-  const currentIndex = useRef(0);
+  const fromIndex = useRef(0);
+  const hoverRef = useRef(0);
   const idsRef = useRef(ids);
   const draggingRef = useRef<string | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragY = useRef(new Animated.Value(0)).current;
+  const slotY = useRef<Record<string, Animated.Value>>({});
   const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
   const taskIdsKey = tasks.map((task) => task.id).join('|');
+
+  for (const id of ids) {
+    if (!slotY.current[id]) slotY.current[id] = new Animated.Value(0);
+  }
 
   useEffect(() => {
     if (draggingId) return;
@@ -44,6 +79,21 @@ export default function DraggableTaskList({ tasks, enabled, onReorder, onDraggin
 
   useEffect(() => () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); }, []);
 
+  useEffect(() => {
+    if (!draggingId) {
+      for (const id of ids) slotY.current[id]?.setValue(0);
+      return;
+    }
+    const dragHeight = heights.current[draggingId] || FALLBACK_HEIGHT;
+    const from = fromIndex.current;
+    const animations = ids.flatMap((id, index) => {
+      if (id === draggingId) return [];
+      const target = siblingShift(index, from, hoverIndex, dragHeight);
+      return [Animated.spring(slotY.current[id], { toValue: target, speed: 48, bounciness: 0, useNativeDriver: false })];
+    });
+    if (animations.length) Animated.parallel(animations).start();
+  }, [draggingId, hoverIndex, ids]);
+
   function clearLongPress() {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
@@ -51,36 +101,38 @@ export default function DraggableTaskList({ tasks, enabled, onReorder, onDraggin
     }
   }
 
-  function finishDrag(commit: boolean) {
-    clearLongPress();
-    if (draggingRef.current && commit) onReorder(idsRef.current);
-    setDraggingId(null);
-    setShiftY(0);
-    if (!commit) setIds(tasks.map((task) => task.id));
-  }
-
   function beginDrag(id: string) {
+    if (draggingRef.current) return;
     const index = idsRef.current.indexOf(id);
     if (index < 0) return;
-    startIndex.current = index;
-    currentIndex.current = index;
+    fromIndex.current = index;
+    hoverRef.current = index;
+    dragY.setValue(0);
+    setHoverIndex(index);
     setDraggingId(id);
-    setShiftY(0);
+  }
+
+  function finishDrag(commit: boolean) {
+    clearLongPress();
+    const id = draggingRef.current;
+    if (!id) return;
+    const next = commit ? moveId(idsRef.current, fromIndex.current, hoverRef.current) : tasks.map((task) => task.id);
+    idsRef.current = next;
+    setIds(next);
+    if (commit && fromIndex.current !== hoverRef.current) onReorder(next);
+    dragY.setValue(0);
+    setDraggingId(null);
+    setHoverIndex(0);
   }
 
   function applyMove(dy: number) {
     const id = draggingRef.current;
     if (!id) return;
-    setShiftY(dy);
-    const height = heights.current[id] || 64;
-    const target = Math.max(0, Math.min(idsRef.current.length - 1, startIndex.current + Math.round(dy / height)));
-    if (target === currentIndex.current) return;
-    const next = moveId(idsRef.current, currentIndex.current, target);
-    currentIndex.current = target;
-    idsRef.current = next;
-    setIds(next);
-    setShiftY(dy - (target - startIndex.current) * height);
-    startIndex.current = target;
+    dragY.setValue(dy);
+    const next = hoverIndexFromDy(fromIndex.current, dy, idsRef.current, heights.current);
+    if (next === hoverRef.current) return;
+    hoverRef.current = next;
+    setHoverIndex(next);
   }
 
   const handlePan = useMemo(() => {
@@ -92,11 +144,11 @@ export default function DraggableTaskList({ tasks, enabled, onReorder, onDraggin
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
           clearLongPress();
-          longPressTimer.current = setTimeout(() => beginDrag(id), 160);
+          longPressTimer.current = setTimeout(() => beginDrag(id), 120);
         },
         onPanResponderMove: (_, gesture) => {
           if (!draggingRef.current) {
-            if (Math.abs(gesture.dy) > 6) {
+            if (Math.abs(gesture.dy) > 4) {
               clearLongPress();
               beginDrag(id);
             } else return;
@@ -123,16 +175,18 @@ export default function DraggableTaskList({ tasks, enabled, onReorder, onDraggin
         if (!task) return null;
         const isDragging = draggingId === id;
         return (
-          <View
+          <Animated.View
             key={id}
             onLayout={(event) => onRowLayout(id, event)}
-            style={isDragging ? { transform: [{ translateY: shiftY }], zIndex: 5, elevation: 5 } : undefined}
+            style={isDragging
+              ? { transform: [{ translateY: dragY }, { scale: 1.015 }], zIndex: 5, elevation: 6, opacity: 0.96 }
+              : { transform: [{ translateY: slotY.current[id] ?? 0 }], zIndex: 0 }}
           >
-            {renderItem(task, index, index === ids.length - 1, {
+            {renderItem(task, index, {
               isDragging,
               handleHandlers: enabled ? handlePan[id]?.panHandlers ?? {} : {},
             })}
-          </View>
+          </Animated.View>
         );
       })}
     </View>

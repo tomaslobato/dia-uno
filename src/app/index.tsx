@@ -104,8 +104,8 @@ export default function TasksScreen() {
   const today = now.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
   const manualSort = !agendaDay && sortMode === 'manual';
   const dateSort = !agendaDay && sortMode === 'date';
-  function renderTaskRow(task: Task, last: boolean, drag?: { isDragging: boolean; handleHandlers: object }) {
-    return <TaskRow key={task.id} task={task} clockKey={Math.floor(now.getTime() / 60000)} swipeDeleteEnabled={!agendaDay && !manualSort && !drag?.isDragging} keepInPlace={matchesTaskDate(task, 'today', now)} listName={agendaDay || !selectedList ? lists.find((list) => list.id === task.listId)?.name : undefined} animateArrival={arrival?.id === task.id && arrival.completed === task.completed} onToggle={() => moveTask(task.id)} onEdit={() => setEditor({ task })} onStar={() => toggleStar(task.id)} onDelete={removeTask} isDragging={drag?.isDragging} dragHandleHandlers={drag?.handleHandlers} dueMode={dateSort ? 'section' : 'full'} last={last} />;
+  function renderTaskRow(task: Task, drag?: { isDragging: boolean; handleHandlers: object }) {
+    return <TaskRow key={task.id} task={task} clockKey={Math.floor(now.getTime() / 60000)} swipeDeleteEnabled={!agendaDay && !manualSort && !drag?.isDragging} keepInPlace={matchesTaskDate(task, 'today', now)} listName={agendaDay || !selectedList ? lists.find((list) => list.id === task.listId)?.name : undefined} animateArrival={arrival?.id === task.id && arrival.completed === task.completed} onToggle={() => moveTask(task.id)} onEdit={() => setEditor({ task })} onStar={() => toggleStar(task.id)} onDelete={removeTask} isDragging={drag?.isDragging} dragHandleHandlers={drag?.handleHandlers} dueMode={dateSort ? 'section' : 'full'} />;
   }
 
   const listContent = (
@@ -137,12 +137,12 @@ export default function TasksScreen() {
           {ready && pending.length > 0 && (dateSections
             ? dateSections.map((section, sectionIndex) => <SectionEntrance key={section.title} section="/" order={sectionIndex + 2}><View style={styles.dateSection}>
                 <Text accessibilityRole="header" style={styles.sectionTitle}>{section.title}</Text>
-                <View style={styles.card}>{section.tasks.map((task, index) => renderTaskRow(task, index === section.tasks.length - 1))}</View>
+                <View style={styles.card}>{section.tasks.map((task) => renderTaskRow(task))}</View>
               </View></SectionEntrance>)
             : <SectionEntrance section="/" order={2}><View style={[styles.card, agendaDay && styles.dayInnerCard]}>
               {manualSort
-                ? <DraggableTaskList tasks={pending} enabled onReorder={reorder} onDraggingChange={setReordering} renderItem={(task, _index, last, drag) => renderTaskRow(task, last, drag)} />
-                : pending.map((task, index) => renderTaskRow(task, index === pending.length - 1))}
+                ? <DraggableTaskList tasks={pending} enabled onReorder={reorder} onDraggingChange={setReordering} renderItem={(task, _index, drag) => renderTaskRow(task, drag)} />
+                : pending.map((task) => renderTaskRow(task))}
             </View></SectionEntrance>)}
           {ready && pending.length === 0 && <SectionEntrance section="/" order={2}><View style={styles.empty}>
             <View style={styles.emptyIllustration}>
@@ -161,7 +161,7 @@ export default function TasksScreen() {
               <MaterialIcons name={showCompleted ? 'keyboard-arrow-down' : 'keyboard-arrow-right'} size={21} color={color('#80868b')} />
               <Text style={styles.completedLabel}>Completadas</Text><Text style={styles.completedCount}>{completed.length}</Text>
             </Pressable>
-            {showCompleted && <View style={[styles.card, agendaDay && styles.dayInnerCard]}>{completed.map((task, index) => <TaskRow key={task.id} task={task} clockKey={Math.floor(now.getTime() / 60000)} swipeDeleteEnabled={!agendaDay} keepInPlace={matchesTaskDate(task, 'today', now)} listName={agendaDay || !selectedList ? lists.find((list) => list.id === task.listId)?.name : undefined} animateArrival={arrival?.id === task.id && arrival.completed === task.completed} onToggle={() => moveTask(task.id)} onEdit={() => setEditor({ task })} onStar={() => toggleStar(task.id)} onDelete={removeTask} last={index === completed.length - 1} />)}</View>}
+            {showCompleted && <View style={[styles.card, agendaDay && styles.dayInnerCard]}>{completed.map((task) => <TaskRow key={task.id} task={task} clockKey={Math.floor(now.getTime() / 60000)} swipeDeleteEnabled={!agendaDay} keepInPlace={matchesTaskDate(task, 'today', now)} listName={agendaDay || !selectedList ? lists.find((list) => list.id === task.listId)?.name : undefined} animateArrival={arrival?.id === task.id && arrival.completed === task.completed} onToggle={() => moveTask(task.id)} onEdit={() => setEditor({ task })} onStar={() => toggleStar(task.id)} onDelete={removeTask} />)}</View>}
           </View></SectionEntrance>}
           </View>
         </ScrollView>

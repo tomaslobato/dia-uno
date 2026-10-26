@@ -6,11 +6,12 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, PanResponder, StyleSheet, Text, View } from 'react-native';
 import { formatDueDate, formatTaskDueInSection, isOverdue, type Task } from '@/models/task';
 
-type Props = { task: Task; listName?: string; onToggle: () => void; onEdit: () => void; onStar: () => void; onDelete: (id: string) => void; animateArrival?: boolean; keepInPlace?: boolean; swipeDeleteEnabled?: boolean; isDragging?: boolean; dragHandleHandlers?: object; dueMode?: 'full' | 'section'; last?: boolean; clockKey?: number };
+type Props = { task: Task; listName?: string; onToggle: () => void; onEdit: () => void; onStar: () => void; onDelete: (id: string) => void; animateArrival?: boolean; keepInPlace?: boolean; swipeDeleteEnabled?: boolean; isDragging?: boolean; dragHandleHandlers?: object; dueMode?: 'full' | 'section'; clockKey?: number };
 
-function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateArrival = false, keepInPlace = false, swipeDeleteEnabled = true, isDragging = false, dragHandleHandlers, dueMode = 'full', last }: Props) {
+function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateArrival = false, keepInPlace = false, swipeDeleteEnabled = true, isDragging = false, dragHandleHandlers, dueMode = 'full' }: Props) {
   const canPress = useAgendaCanPress();
-  const { styles, color, accentText } = useSectionStyles(makeStyles, 'tasks');
+  const { styles, color, accentText, preferences } = useSectionStyles(makeStyles, 'tasks');
+  const divider = preferences.dark ? '#1a1c20' : '#eceef2';
   const [entering, setEntering] = useState(animateArrival);
   const [presence] = useState(() => new Animated.Value(animateArrival ? 0 : 1));
   const [rowHeight, setRowHeight] = useState(0);
@@ -97,7 +98,7 @@ function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateAr
   return (
     <Animated.View {...(swipeDeleteEnabled ? panResponder.panHandlers : {})} pointerEvents={transitioning ? 'none' : 'auto'} style={{ overflow: 'hidden', opacity: isDragging ? 0.92 : presence, height: rowHeight && (transitioning || entering) ? presence.interpolate({ inputRange: [0, 1], outputRange: [0, rowHeight] }) : undefined }}>
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.deleteBackground, { opacity: translateX.interpolate({ inputRange: [-72, 0], outputRange: [1, 0], extrapolate: 'clamp' }) }]}><MaterialIcons name="delete-outline" size={24} color="#fff" /></Animated.View>
-    <Animated.View onLayout={(event) => { rowWidth.current = event.nativeEvent.layout.width; if (!transitioning) setRowHeight(event.nativeEvent.layout.height); }} style={[styles.row, { transform: [{ translateX }] }, isDragging && styles.rowDragging, !last && styles.rowOverlap, rowHeight && (transitioning || entering) ? { height: rowHeight, flexShrink: 0 } : undefined]}>
+    <Animated.View onLayout={(event) => { rowWidth.current = event.nativeEvent.layout.width; if (!transitioning) setRowHeight(event.nativeEvent.layout.height); }} style={[styles.row, { borderBottomColor: divider, transform: [{ translateX }] }, isDragging && styles.rowDragging, rowHeight && (transitioning || entering) ? { height: rowHeight, flexShrink: 0 } : undefined]}>
       <Pressable onPress={toggleWithAnimation} disabled={transitioning || isDragging} accessibilityRole="checkbox" accessibilityLabel={`${task.completed ? 'Marcar como pendiente' : 'Completar'}: ${task.title}`} accessibilityState={{ checked: task.completed, disabled: transitioning || isDragging }} aria-checked={task.completed} style={styles.checkTarget}>
         <Animated.View style={[styles.checkbox, {
           transform: [{ scale: checkScale }],
@@ -145,13 +146,13 @@ function TaskRow({ task, listName, onToggle, onEdit, onStar, onDelete, animateAr
               </View>
             </View>}
           </View>
-          <View style={styles.titleActions}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Estrella: ${task.title}`} aria-pressed={task.starred} accessibilityState={{ selected: task.starred }} onPress={() => { if (canPress() && !isDragging && !dragging.current && !deleting.current) onStar(); }} style={styles.starTarget}><MaterialIcons name={task.starred ? 'star' : 'star-border'} size={23} color={task.starred ? color('#1a73e8') : color('#80868b')} /></Pressable>
-            {dragHandleHandlers ? <View accessibilityRole="button" accessibilityLabel={`Reordenar ${task.title}`} accessibilityHint="Mantén pulsado y arrastra para cambiar el orden" style={styles.dragHandle} {...dragHandleHandlers}><MaterialIcons name="drag-indicator" size={22} color={color('#80868b')} /></View> : null}
-          </View>
         </View>
         </View>
       </View>
+      </View>
+      <View style={styles.titleActions}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Estrella: ${task.title}`} aria-pressed={task.starred} accessibilityState={{ selected: task.starred }} onPress={() => { if (canPress() && !isDragging && !dragging.current && !deleting.current) onStar(); }} style={styles.starTarget}><MaterialIcons name={task.starred ? 'star' : 'star-border'} size={23} color={task.starred ? color('#1a73e8') : color('#80868b')} /></Pressable>
+        {dragHandleHandlers ? <View accessibilityRole="button" accessibilityLabel={`Reordenar ${task.title}`} accessibilityHint="Mantén pulsado y arrastra para cambiar el orden" style={styles.dragHandle} {...dragHandleHandlers}><MaterialIcons name="drag-indicator" size={22} color={color('#80868b')} /></View> : null}
       </View>
     </Animated.View>
     </Animated.View>
@@ -163,28 +164,27 @@ function sameTaskRow(previous: Props, next: Props) {
   return previous.task === next.task && previous.listName === next.listName && previous.animateArrival === next.animateArrival &&
     previous.keepInPlace === next.keepInPlace && previous.swipeDeleteEnabled === next.swipeDeleteEnabled &&
     previous.isDragging === next.isDragging && previous.dragHandleHandlers === next.dragHandleHandlers &&
-    previous.dueMode === next.dueMode && previous.last === next.last && previous.clockKey === next.clockKey;
+    previous.dueMode === next.dueMode && previous.clockKey === next.clockKey;
 }
 
 export default memo(TaskRow, sameTaskRow);
 
 const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   deleteBackground: { backgroundColor: color('#b3261e'), alignItems: 'flex-end', justifyContent: 'center', paddingRight: 24 },
-  row: { backgroundColor: color('#f8fafd'), flexDirection: 'row', alignItems: 'stretch', minHeight: 60, overflow: 'hidden', borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: color('#edf0f5') },
-  rowDragging: { backgroundColor: color('#edf3fd'), borderColor: color('#1a73e8') },
-  rowOverlap: { marginBottom: -StyleSheet.hairlineWidth },
+  row: { backgroundColor: color('#f8fafd'), flexDirection: 'row', alignItems: 'stretch', minHeight: 60, overflow: 'hidden', borderBottomWidth: StyleSheet.hairlineWidth },
+  rowDragging: { backgroundColor: color('#edf3fd') },
   checkTarget: { width: 48, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   editArea: { flex: 1, minWidth: 0, justifyContent: 'center' },
-  titleActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  titleActions: { flexDirection: 'row', alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', flexShrink: 0, paddingRight: 6 },
   starTarget: { width: 36, height: 36, flexShrink: 0, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   dragHandle: { width: 34, height: 36, alignItems: 'center', justifyContent: 'center' },
   checkbox: { width: 21, height: 21, borderWidth: 1.7, borderColor: color('#a8b1be'), borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  content: { flexGrow: 1, flexShrink: 0, minWidth: 0, paddingVertical: 8, paddingRight: 6, justifyContent: 'center' },
+  content: { flexGrow: 1, flexShrink: 0, minWidth: 0, paddingVertical: 8, justifyContent: 'center' },
   contentCompact: { minHeight: 60, paddingVertical: 0, justifyContent: 'center' },
   textContent: { flex: 1, minWidth: 0, gap: 4, justifyContent: 'center' },
   textContentCompact: { justifyContent: 'center' },
   listName: { fontFamily: 'Manrope-Medium', fontSize: 11, lineHeight: 15, color: color('#1a73e8') },
-  mainRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  mainRow: { flexDirection: 'row', alignItems: 'flex-start' },
   mainRowCompact: { minHeight: 60, alignItems: 'center' },
   textStack: { flex: 1, minWidth: 0, gap: 4 },
   titleWrap: { position: 'relative' },
