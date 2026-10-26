@@ -3,7 +3,7 @@ import TaskScheduleModal, { type ScheduleDraft } from '@/components/task-schedul
 import { useSectionStyles } from '@/theme/appearance';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useCallback, useRef, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { dayKey } from '@/models/habit';
 import { type TaskList } from '@/models/task-list';
@@ -23,18 +23,19 @@ type Props = {
   onStar: (id: string) => void;
 };
 
-export default function TaskEditor({ task, occurrenceDay, initialDate, initialListId, onSave, onDelete, onClose, onToggle }: Props) {
+export default function TaskEditor({ task, occurrenceDay, initialDate, lists, initialListId, onSave, onDelete, onClose, onToggle }: Props) {
   const { styles, color } = useSectionStyles(makeStyles, 'tasks');
   const insets = useSafeAreaInsets();
   const titleInput = useRef<TextInput>(null);
   const descriptionInput = useRef<TextInput>(null);
   const closing = useRef(false);
-  const [listId] = useState<string | null>(task ? task.listId : initialListId);
+  const [listId, setListId] = useState<string | null>(task ? task.listId : initialListId);
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
   const [showDescription, setShowDescription] = useState(Boolean(task?.description));
   const [starred, setStarred] = useState(task?.starred ?? false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [listPickerOpen, setListPickerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [date, setDate] = useState<Date | null>(() => {
     if (task) return task.dueAt ? new Date(task.dueAt) : null;
@@ -147,12 +148,19 @@ export default function TaskEditor({ task, occurrenceDay, initialDate, initialLi
         date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }),
         hasTime ? date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) : null,
       ].filter(Boolean).join(' · ');
+  const selectedList = listId ? lists.find((list) => list.id === listId) : undefined;
   const completed = Boolean(
     task && occurrenceDay && isRecurringTask(task)
       ? isOccurrenceCompleted(task, occurrenceDay)
       : task?.completed,
   );
   const recurring = Boolean(task && isRecurringTask(task));
+
+  function pickList(next: string | null) {
+    setListId(next);
+    setListPickerOpen(false);
+    focusTitle();
+  }
 
   function toggleCompleted() {
     if (!task || closing.current) return;
@@ -250,6 +258,15 @@ export default function TaskEditor({ task, occurrenceDay, initialDate, initialLi
                 <Pressable accessibilityRole="button" accessibilityLabel="Fecha y hora" accessibilityState={{ selected: scheduleActive }} onPress={() => { Keyboard.dismiss(); setScheduleOpen(true); }} style={[styles.tool, scheduleActive && styles.toolActive]}>
                   <MaterialIcons name="schedule" size={22} color={color(scheduleActive ? '#1a73e8' : '#5f6368')} />
                 </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={selectedList ? `Lista: ${selectedList.name}` : 'Elegir lista'}
+                  accessibilityState={{ selected: Boolean(listId) }}
+                  onPress={() => { Keyboard.dismiss(); setListPickerOpen(true); }}
+                  style={[styles.tool, listId && styles.toolActive]}
+                >
+                  <MaterialIcons name="list" size={22} color={color(listId ? '#1a73e8' : '#5f6368')} />
+                </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel="Importante" accessibilityState={{ selected: starred }} onPress={() => setStarred((current) => !current)} style={[styles.tool, starred && styles.toolActive]}>
                   <MaterialIcons name={starred ? 'star' : 'star-border'} size={22} color={color(starred ? '#1a73e8' : '#5f6368')} />
                 </Pressable>
@@ -277,6 +294,48 @@ export default function TaskEditor({ task, occurrenceDay, initialDate, initialLi
         onClose={() => { setScheduleOpen(false); focusTitle(); }}
         onDone={applySchedule}
       />}
+      {listPickerOpen && (
+        <Modal transparent visible animationType="fade" onRequestClose={() => { setListPickerOpen(false); focusTitle(); }}>
+          <View style={styles.listOverlay}>
+            <Pressable feedback={false} style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="Cerrar" onPress={() => { setListPickerOpen(false); focusTitle(); }} />
+            <View style={styles.listSheet} accessibilityViewIsModal>
+              <Text accessibilityRole="header" style={styles.listTitle}>Elegir lista</Text>
+              {lists.length === 0 ? (
+                <Text style={styles.listEmpty}>Todavía no tienes listas. Créalas desde Tareas.</Text>
+              ) : (
+                <ScrollView style={styles.listScroll} bounces={false} keyboardShouldPersistTaps="handled">
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Ninguna"
+                    accessibilityState={{ selected: listId === null }}
+                    onPress={() => pickList(null)}
+                    style={[styles.listOption, listId === null && styles.listOptionSelected]}
+                  >
+                    <Text style={[styles.listOptionText, listId === null && styles.listOptionTextSelected]}>Ninguna</Text>
+                    {listId === null ? <MaterialIcons name="check" size={20} color={color('#1a73e8')} /> : null}
+                  </Pressable>
+                  {lists.map((list) => {
+                    const selected = listId === list.id;
+                    return (
+                      <Pressable
+                        key={list.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={list.name}
+                        accessibilityState={{ selected }}
+                        onPress={() => pickList(list.id)}
+                        style={[styles.listOption, selected && styles.listOptionSelected]}
+                      >
+                        <Text numberOfLines={1} style={[styles.listOptionText, selected && styles.listOptionTextSelected]}>{list.name}</Text>
+                        {selected ? <MaterialIcons name="check" size={20} color={color('#1a73e8')} /> : null}
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </View>
+          </View>
+        </Modal>
+      )}
     </Modal>
   );
 }
@@ -311,4 +370,13 @@ const makeStyles = (color: (value: string) => string) => StyleSheet.create({
   save: { paddingHorizontal: 16, paddingVertical: 11, borderRadius: 16, backgroundColor: color('#1a73e8') },
   saveDisabled: { opacity: 0.4 },
   saveText: { fontFamily: 'Manrope-SemiBold', fontSize: 14, color: '#fff' },
+  listOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.35)' },
+  listSheet: { width: '100%', maxWidth: 420, maxHeight: '70%', padding: 18, gap: 6, borderRadius: 20, backgroundColor: color('#fff') },
+  listTitle: { fontFamily: 'Manrope-SemiBold', fontSize: 20, color: color('#202124'), marginBottom: 4 },
+  listEmpty: { fontFamily: 'Manrope-Regular', fontSize: 14, lineHeight: 21, color: color('#5f6368'), paddingVertical: 8 },
+  listScroll: { flexGrow: 0 },
+  listOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 12, paddingVertical: 14, borderRadius: 12 },
+  listOptionSelected: { backgroundColor: color('#e8f0fe') },
+  listOptionText: { flex: 1, minWidth: 0, fontFamily: 'Manrope-Medium', fontSize: 16, color: color('#202124') },
+  listOptionTextSelected: { color: color('#1a73e8') },
 });

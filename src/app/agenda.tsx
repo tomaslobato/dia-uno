@@ -10,6 +10,7 @@ import { useHabits } from '@/hooks/use-habits';
 import AgendaTaskEntry from '@/components/agenda-task-entry';
 import HabitModal from '@/components/habit-modal';
 import TaskEditor from '@/components/task-editor';
+import WeekScrollHint from '@/components/week-scroll-hint';
 import { useTaskDeletion } from '@/hooks/use-task-deletion';
 import { SectionEntrance } from '@/components/section-motion';
 import { useSectionStyles } from '@/theme/appearance';
@@ -319,6 +320,7 @@ export default function AgendaScreen() {
       </View>
       {(editingTask || creatingOn) && <TaskEditor key={editingTask ? `${editingTask.id}@${editing!.day}` : `new-agenda-task-${creatingOn}`} task={editingTask} occurrenceDay={editing?.day} initialDate={!editingTask && creatingOn ? localDay(creatingOn) : undefined} lists={lists} initialListId={editingTask?.listId ?? null} onSave={saveTask} onToggle={(id) => toggleTask(id, editing?.day)} onStar={toggleStar} onDelete={(id, scope) => removeTask(id, { scope, day: editing?.day })} onClose={() => { setEditing(null); setCreatingOn(null); }} />}
       {editingHabit && <HabitModal key={editingHabit.id} habit={editingHabit} today={today} onClose={() => setEditingHabitId(null)} onSave={(name, interval, description) => updateHabit(editingHabit.id, name, interval, description)} onToggle={(day) => toggleDay(editingHabit.id, day)} onDelete={() => deleteHabit(editingHabit.id)} />}
+      <WeekScrollHint active={detailed && !fixedWeek} />
     </SafeAreaView>
   );
 }
